@@ -686,6 +686,7 @@
 
   try {
     const render = makeRenderer();
+    window.RailwayLaunch?.advance(90);
     let lastFrame = performance.now();
     let lastRender = '';
     let motionSeconds = 0;
@@ -711,16 +712,19 @@
       showPlanetPosition(distance);
       updateUi(minute, cam.chapter);
       render(minute, distance, cam, width / height, motionSeconds);
+      window.RailwayLaunch?.ready();
     }
     canvas.addEventListener('webglcontextlost', event => {
       event.preventDefault();
       byId('failure').textContent = '观景画面暂时中断，刷新页面即可继续。';
       byId('failure').hidden = false;
+      window.RailwayLaunch?.fail('观景画面暂时中断，请重新打开。');
     });
     requestAnimationFrame(frame);
   } catch (error) {
     console.error(error);
     byId('failure').textContent = gl ? '观景画面初始化失败，请刷新页面或换一个浏览器打开。' : error.message;
     byId('failure').hidden = false;
+    window.RailwayLaunch?.fail('观景画面初始化失败，请重新打开或换一个浏览器。');
   }
 })();
