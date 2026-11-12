@@ -151,35 +151,125 @@ const MintSea = (() => {
   });
   function fish(seconds) {
     const result=[];
-    for(const [index,{center,forward,kind}] of schools.entries())for(let i=0;i<5;i++) {
-      const a=seconds*.072+index*.93+i*.31;
+    for(const [index,{center,forward,kind}] of schools.entries())for(let i=0;i<10;i++) {
+      const member=i%5,layer=Math.floor(i/5);
+      const a=seconds*.072+index*.93+member*.31+layer*.65;
       const side=[-forward[2],0,forward[0]];
       const h=W.unit(W.add(W.mul(forward,-Math.sin(a)*7),W.mul(side,Math.cos(a)*4.5)));
-      const position=W.add(center,W.add(W.mul(forward,Math.cos(a)*7+(i-2)*2.2),W.mul(side,Math.sin(a)*4.5)));
-      position[1]+=Math.sin(seconds*.32+i*1.8)*.70;
-      const size=.67+(i%3)*.13;
-      result.push({kind,position,heading:h,size,tail:Math.sin(seconds*3.5+i*1.2+index)*.29});
+      const position=W.add(center,W.add(W.mul(forward,Math.cos(a)*7+(member-2)*2.2-layer*7),W.mul(side,Math.sin(a)*4.5+layer*4)));
+      position[1]+=Math.sin(seconds*.32+member*1.8+layer)*.70+layer*.65;
+      const size=.67+(member%3)*.13;
+      result.push({kind:layer ? (kind+2)%palettes.length : kind,position,heading:h,size,tail:Math.sin(seconds*3.5+i*1.2+index)*.29});
     }
     return result;
   }
+  const rayRows=24,rayColumns=36,tailRows=32,tailSides=12;
+  let rayModel=null;
+  function makeRayModel() {
+    const details=new W.Mesh();
+    // Rounded head, raised eyes and spiracles sit on a continuous, thick disc.
+    ellipsoid(details,[.55,.12,0],[1.24,.31,.64],rgb(0xf0e9dc),.10,12,24);
+    ellipsoid(details,[1.48,.035,0],[.44,.16,.33],rgb(0xf4ecdf),.12,10,20);
+    ellipsoid(details,[0,-.075,0],[1.43,.18,.88],rgb(0xfff4e7),.18,12,24);
+    for(const side of [-1,1]) {
+      ellipsoid(details,[1.02,.39,side*.37],[.19,.13,.15],rgb(0xede5d7),.10,8,16);
+      ellipsoid(details,[1.09,.435,side*.455],[.072,.069,.043],rgb(0x465c60),.04,8,16);
+      ellipsoid(details,[1.115,.458,side*.48],[.021,.022,.011],rgb(0xfffaf0),.30,6,10);
+      ellipsoid(details,[.49,.415,side*.43],[.22,.047,.115],rgb(0xe8d7cb),.08,8,16);
+      ellipsoid(details,[.48,.455,side*.43],[.145,.013,.064],rgb(0x9a8c82),.03,6,14);
+      ellipsoid(details,[-1.25,-.06,side*.62],[.49,.06,.29],rgb(0xf0dcd8),.12,7,16);
+      // Ventral nostrils and five pairs of shallow, curved gill slits.
+      ellipsoid(details,[1.27,-.172,side*.23],[.080,.013,.042],rgb(0xa99a8b),.03,5,10);
+      for(let slit=0;slit<5;slit++)for(let segment=0;segment<7;segment++) {
+        const p=t=>[.54-slit*.23+.045*Math.sin(t*Math.PI),-.215+.014*Math.cos(t*Math.PI),side*(.31+t*.34)];
+        details.branch(p(segment/7),p((segment+1)/7),.009,.009,rgb(0xae9c8c));
+      }
+    }
+    for(let i=0;i<16;i++) {
+      const p=t=>[1.16+.10*Math.sin(t*Math.PI),-.204+.012*Math.cos(t*TAU),-.27+t*.54];
+      details.branch(p(i/16),p((i+1)/16),.012,.012,rgb(0x958578));
+    }
+    const stride=rayColumns+1,count=(rayRows+1)*stride;
+    const base=new Float32Array(count*7);
+    const colors=new Float32Array(count*2*3);
+    const cream=rgb(0xf2eadc),belly=rgb(0xfff4e8),rose=rgb(0xe7bdcb);
+    for(let row=0;row<=rayRows;row++)for(let column=0;column<=rayColumns;column++) {
+      const t=row/rayRows,u=column/rayColumns*2-1,s=Math.max(0,Math.sin(t*Math.PI)),edge=Math.abs(u);
+      const i=row*stride+column,k=i*7;
+      const leading=1.85-2.23*edge**1.15;
+      const trailing=-1.60+1.18*edge**.80;
+      base[k]=W.mix(leading,trailing,t);
+      base[k+1]=u*(4.30-.06*(2*t-1)**2);
+      base[k+2]=s**.75;
+      base[k+3]=edge;
+      base[k+4]=.035+.28*(1-u*u)**2*s**.7+.065*s*(1-edge);
+      base[k+5]=-.025-.19*(1-u*u)**2*s**.7;
+      base[k+6]=W.smooth(W.clamp((edge-.16)/.84,0,1));
+      const edgeTint=W.smooth(W.clamp((edge-.76)/.24,0,1))*.65;
+      for(let side=0;side<2;side++)for(let c=0;c<3;c++)colors[(side*count+i)*3+c]=W.mix(side ? belly[c] : cream[c],rose[c],edgeTint);
+    }
+    const vertices=rayRows*rayColumns*12+(rayRows+rayColumns)*12+tailRows*tailSides*6;
+    return {base,colors,count,stride,details:new Float32Array(details.data),grid:new Float32Array(count*2*6),
+      tail:new Float32Array((tailRows+1)*(tailSides+1)*6),data:new Float32Array(vertices*10+details.data.length)};
+  }
   function ray(seconds) {
-    const mesh=new W.Mesh();
-    const point=(t,u)=>{
-      const s=Math.sin(t*Math.PI),edge=Math.abs(u);
-      return [1.5-2.9*t-edge*.65*s,.13*(1-u*u)+Math.sin(seconds*.86-edge*1.2)*edge**1.7*.60,u*s**.65*3.5];
+    rayModel ||= makeRayModel();
+    const {base,colors,count,stride,grid,tail,details,data}=rayModel;
+    const bank=.33*Math.sin(seconds*.21+.5),pitch=.07*Math.sin(seconds*.35);
+    const cb=Math.cos(bank),sb=Math.sin(bank),cp=Math.cos(pitch),sp=Math.sin(pitch);
+    let offset=0;
+    const emit=(x,y,z,nx,ny,nz,r,g,b,glow)=>{
+      const by=cb*y-sb*z,bz=sb*y+cb*z,bny=cb*ny-sb*nz,bnz=sb*ny+cb*nz;
+      data[offset++]=cp*x-sp*by;data[offset++]=sp*x+cp*by;data[offset++]=bz;
+      data[offset++]=cp*nx-sp*bny;data[offset++]=sp*nx+cp*bny;data[offset++]=bnz;
+      data[offset++]=r;data[offset++]=g;data[offset++]=b;data[offset++]=glow;
     };
-    for(let i=0;i<14;i++)for(let j=0;j<20;j++) {
-      const t=i/14,v=(i+1)/14,u=j/10-1,w=(j+1)/10-1;
-      mesh.quad(point(t,u),point(v,u),point(v,w),point(t,w),rgb(Math.abs(u)>.8 ? 0xeac4d0 : 0xf4efdd),.13);
+    // A slow travelling wave starts near the body and rolls out to each fin tip.
+    for(let side=0;side<2;side++)for(let row=0;row<=rayRows;row++)for(let column=0;column<=rayColumns;column++) {
+      const i=row*stride+column,k=i*7,g=(side*count+i)*6,t=row/rayRows;
+      const bend=Math.sin(seconds*.86-base[k+3]*1.35+t*.35)*.90*base[k+6]*(.85+.15*base[k+2]);
+      const curl=Math.sin(seconds*.86-base[k+3]*1.35+t*3.3)*.10*base[k+3]**2*t*t;
+      grid[g]=base[k];grid[g+1]=base[k+(side ? 5 : 4)]+bend+curl;grid[g+2]=base[k+1];
     }
-    ellipsoid(mesh,[.05,.03,0],[1.2,.23,.46],rgb(0xf6efdf),.10,7,12);
-    for(const side of [-1,1])ellipsoid(mesh,[.82,.25,side*.22],[.09,.05,.07],rgb(0x526a69),0,4,7);
-    for(let i=0;i<10;i++) {
-      const p=t=>[-1.1-t*5.2,-.03-t*.16,Math.sin(t*3-seconds*.65)*t*.30];
-      mesh.branch(p(i/10),p((i+1)/10),.07-i*.005,.065-i*.005,rgb(0xe8dfd2));
+    // Recompute smooth normals from the deformed surface; there are no flat triangle seams.
+    for(let side=0;side<2;side++)for(let row=0;row<=rayRows;row++)for(let column=0;column<=rayColumns;column++) {
+      const origin=side*count,g=(origin+row*stride+column)*6;
+      const a=(origin+Math.max(0,row-1)*stride+column)*6,b=(origin+Math.min(rayRows,row+1)*stride+column)*6;
+      const c=(origin+row*stride+Math.max(0,column-1))*6,d=(origin+row*stride+Math.min(rayColumns,column+1))*6;
+      const tx=grid[b]-grid[a],ty=grid[b+1]-grid[a+1],tz=grid[b+2]-grid[a+2];
+      const ux=grid[d]-grid[c],uy=grid[d+1]-grid[c+1],uz=grid[d+2]-grid[c+2];
+      const nx=ty*uz-tz*uy,ny=tz*ux-tx*uz,nz=tx*uy-ty*ux;
+      const length=Math.hypot(nx,ny,nz)||1,sign=side ? -1 : 1;
+      grid[g+3]=nx/length*sign;grid[g+4]=ny/length*sign;grid[g+5]=nz/length*sign;
     }
+    const vertex=(side,i)=>{
+      const g=(side*count+i)*6,c=(side*count+i)*3;
+      emit(grid[g],grid[g+1],grid[g+2],grid[g+3],grid[g+4],grid[g+5],colors[c],colors[c+1],colors[c+2],side ? .18 : .10);
+    };
+    for(let side=0;side<2;side++)for(let row=0;row<rayRows;row++)for(let column=0;column<rayColumns;column++) {
+      const a=row*stride+column,b=a+stride;
+      vertex(side,a);vertex(side,b);vertex(side,b+1);vertex(side,a);vertex(side,b+1);vertex(side,a+1);
+    }
+    const rim=(a,b)=>{vertex(0,a);vertex(0,b);vertex(1,b);vertex(0,a);vertex(1,b);vertex(1,a);};
+    for(let row=0;row<rayRows;row++){rim(row*stride,(row+1)*stride);rim(row*stride+rayColumns,(row+1)*stride+rayColumns);}
+    for(let c=0;c<rayColumns;c++){rim(c,c+1);rim(rayRows*stride+c,rayRows*stride+c+1);}
+    // The tapered tail is a closed, smoothly shaded curved tube.
+    for(let row=0;row<=tailRows;row++)for(let column=0;column<=tailSides;column++) {
+      const t=row/tailRows,a=column/tailSides*TAU,r=.12*(1-t)**1.3+.006,k=(row*(tailSides+1)+column)*6;
+      tail[k]=-1.35-t*6.85;
+      tail[k+1]=-.025-.20*t+Math.sin(t*4-seconds*.65)*t*.12+Math.cos(a)*r;
+      tail[k+2]=Math.sin(t*5-seconds*.70)*t**.9*.25+Math.sin(a)*r;
+      tail[k+3]=-.045;tail[k+4]=Math.cos(a);tail[k+5]=Math.sin(a);
+    }
+    const tailColor=rgb(0xeadfd5);
+    const tailVertex=i=>{const k=i*6;emit(tail[k],tail[k+1],tail[k+2],tail[k+3],tail[k+4],tail[k+5],...tailColor,.10);};
+    for(let row=0;row<tailRows;row++)for(let c=0;c<tailSides;c++) {
+      const a=row*(tailSides+1)+c,b=a+tailSides+1;
+      tailVertex(a);tailVertex(b);tailVertex(b+1);tailVertex(a);tailVertex(b+1);tailVertex(a+1);
+    }
+    for(let i=0;i<details.length;i+=10)emit(details[i],details[i+1],details[i+2],details[i+3],details[i+4],details[i+5],details[i+6],details[i+7],details[i+8],details[i+9]);
     const a=seconds*.026;
-    return {data:new Float32Array(mesh.data),position:[S.x+23+Math.cos(a)*46,.25+Math.sin(a*2)*.35,S.z-54+Math.sin(a)*27],heading:W.unit([-46*Math.sin(a),0,27*Math.cos(a)])};
+    return {data,position:[S.x+32+Math.cos(a)*46,.25+Math.sin(a*2)*.35,S.z-45+Math.sin(a)*27],heading:W.unit([-46*Math.sin(a),0,27*Math.cos(a)])};
   }
   return {create,influence,fish,ray,routeStart,routeEnd};
 })();

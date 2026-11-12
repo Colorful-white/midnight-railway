@@ -93,21 +93,41 @@ const RailwayWorld = (() => {
   const east = rail(172, 5);
   rail(196, 34); rail(254, 54); rail(329, 62);
   countryLine(410, 62, 1, 0, 15700, 510, { entry: 8750, exit: 8250, build() {
+    const line=(a,b,steps)=>{
+      for(let i=1;i<=steps;i++) {
+        const p=a.map((v,j)=>mix(v,b[j],i/steps));
+        rail(sea.x+p[0],sea.z+p[2],p[1]);
+      }
+    };
     sea.startNode = rail(sea.x+250,sea.z-60,5);
     rail(sea.x+192,sea.z-52,5); rail(sea.x+150,sea.z-45,4.8);
     rail(sea.x+124,sea.z-40,1.1); rail(sea.x+104,sea.z-33,-3.1);
     stops[3].node = rail(sea.x+85,sea.z-25,-5.8);
-    rail(sea.x+47,sea.z-12,-5.8); rail(sea.x+3,sea.z+1,-5.8);
-    rail(sea.x-40,sea.z+12,-5.8);
-    for (let i=1;i<=24;i++) {
-      const t=i/24, angle=-1.1+TAU*t, radius=mix(34,27,t);
-      rail(sea.x-55+Math.cos(angle)*radius,sea.z+42+Math.sin(angle)*radius,
-        -5.8+6.2*smooth(clamp((t-.73)/.27,0,1)));
+    line([85,-5.8,-25],[47,-5.8,-12],6);
+    line([47,-5.8,-12],[3,-5.8,1],7);
+    const curve = (a,b,c,d,steps) => {
+      for(let i=1;i<=steps;i++) {
+        const t=i/steps,u=1-t;
+        const p=a.map((v,j)=>u*u*u*v+3*u*u*t*b[j]+3*u*t*t*c[j]+t*t*t*d[j]);
+        rail(sea.x+p[0],sea.z+p[2],p[1]);
+      }
+    };
+    // Join the circular tour along its tangent, on both levels of the crossing.
+    const entryAngle=-1.9,radius=34;
+    const entry=[-55+Math.cos(entryAngle)*radius,-5.8,44+Math.sin(entryAngle)*radius];
+    const tangent=[Math.sin(entryAngle),0,-Math.cos(entryAngle)];
+    curve([3,-5.8,1],[-21,-5.8,8],sub(entry,mul(tangent,24)),entry,10);
+    for (let i=1;i<=48;i++) {
+      const t=i/48,angle=entryAngle-TAU*t;
+      rail(sea.x-55+Math.cos(angle)*radius,sea.z+44+Math.sin(angle)*radius,
+        -5.8+6.5*smooth(clamp((t-.60)/.40,0,1)));
     }
-    rail(sea.x-72,sea.z+2,.55); rail(sea.x-110,sea.z-18,1.2);
-    stops[3].endNode = rail(sea.x-145,sea.z-32,3.8);
-    rail(sea.x-188,sea.z-41,5.1);
-    sea.endNode = rail(sea.x-250,sea.z-45,5.1);
+    const exit=[entry[0],.7,entry[2]];
+    curve(exit,add(exit,mul(tangent,35)),[-108,2.3,-24],[-145,3.8,-32],12);
+    stops[3].endNode = controls.length-1;
+    line([-145,3.8,-32],[-188,5.1,-41],7);
+    line([-188,5.1,-41],[-250,5.1,-45],9);
+    sea.endNode = controls.length-1;
   }});
   const south = rail(323, 572);
   rail(246, 552); rail(183, 507); rail(141, 435); rail(120, 356);

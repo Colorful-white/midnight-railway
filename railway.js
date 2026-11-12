@@ -678,6 +678,7 @@
     }
     let sea = null;
     const rayBuffer = buffer([],gl.DYNAMIC_DRAW);
+    let rayCapacity = 0;
     function prepareSea() {
       if (sea) return;
       const model = MintSea.create();
@@ -694,7 +695,11 @@
       }
       const ray=MintSea.ray(seconds);
       gl.bindBuffer(gl.ARRAY_BUFFER,rayBuffer.handle);
-      gl.bufferData(gl.ARRAY_BUFFER,ray.data,gl.DYNAMIC_DRAW);
+      if(rayCapacity!==ray.data.byteLength) {
+        gl.bufferData(gl.ARRAY_BUFFER,ray.data.byteLength,gl.DYNAMIC_DRAW);
+        rayCapacity=ray.data.byteLength;
+      }
+      gl.bufferSubData(gl.ARRAY_BUFFER,0,ray.data);
       rayBuffer.count=ray.data.length/10;
       draw(rayBuffer,ray.position,ray.heading);
     }
