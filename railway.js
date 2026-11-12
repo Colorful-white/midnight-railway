@@ -367,10 +367,8 @@
     return [x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0,
       -W.dot(x,eye),-W.dot(y,eye),-W.dot(z,eye),1];
   }
-  function projection(fov, aspect) {
+  function projection(fov, aspect, near = .15, far = 650) {
     const f = 1 / Math.tan(fov * Math.PI / 360);
-    const near = .15;
-    const far = 650;
     return [f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)/(near-far),-1, 0,0,2*far*near/(near-far),0];
   }
   function camera(distance, aspect) {
@@ -640,7 +638,8 @@
         cabinAspect = aspect;
       }
       gl.clear(gl.DEPTH_BUFFER_BIT);
-      gl.uniformMatrix4fv(uniforms.projection,false,projection(cabin.fov,aspect));
+      // The foreground has its own depth pass: reserve precision for thin petals and leaf veins.
+      gl.uniformMatrix4fv(uniforms.projection,false,projection(cabin.fov,aspect,2,20));
       gl.uniformMatrix4fv(uniforms.camera,false,viewMatrix(cabin.eye,cabin.target));
       gl.uniform3fv(uniforms.light,sky.light.map((value,i) => W.mix([.95,.89,.78][i],value,.28)));
       gl.uniform1f(uniforms.fogStart,1000);

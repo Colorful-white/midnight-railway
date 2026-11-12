@@ -74,32 +74,109 @@ const CabinScene = (() => {
     }
     mesh.branch(start,tip,.0028,.001,color(0x829052));
   }
-  function bell(mesh, neck, size, lean) {
-    const axis = W.unit([lean,-.85,.52]);
+  // Curved leaves and petals are real double-sided surfaces with smooth normals.
+  // Colour and fine fluting live in the vertices; no image planes or textures.
+  function botanicalSurface(mesh, point, tint, rows, columns, inside = false) {
+    const sample = (t,u) => {
+      const p = point(t,u);
+      const dt = W.sub(point(Math.min(1,t+.0005),u),point(Math.max(0,t-.0005),u));
+      const du = W.sub(point(t,u+.0005),point(t,u-.0005));
+      const normal = W.mul(W.unit(W.cross(du,dt)),inside ? -1 : 1);
+      return [...p,...normal,...tint(t,u),0];
+    };
+    const grid = Array.from({length:rows+1},(_,r) =>
+      Array.from({length:columns+1},(_,c) => sample(r/rows,c/columns)));
+    for (let r=0;r<rows;r++) for (let c=0;c<columns;c++) {
+      const corners = [grid[r][c],grid[r][c+1],grid[r+1][c+1],grid[r+1][c]];
+      for (const index of inside ? [0,2,1,0,3,2] : [0,1,2,0,2,3]) mesh.data.push(...corners[index]);
+    }
+  }
+  function foliage(mesh, start, tip, width, shade = 0x63834d, detail = true) {
+    const direction = W.sub(tip,start);
+    const side = W.unit(W.cross(direction,[0,0,1]));
+    const facing = W.unit(W.cross(side,direction));
+    const center = t => W.add(W.add(start,W.mul(direction,t)),W.mul(facing,Math.sin(t*Math.PI)*width*.34));
+    const point = (t,u,back = false) => {
+      const v = u*2-1;
+      const outline = Math.sin(Math.PI*t)**.8 * (1+.045*Math.sin(t*18*Math.PI));
+      return W.add(W.add(center(t),W.mul(side,width*outline*v)),
+        W.mul(facing,-width*.20*Math.abs(v)*Math.sin(Math.PI*t)-(back ? .003 : 0)));
+    };
+    const rows = detail ? 8 : 4;
+    const columns = detail ? 4 : 2;
+    botanicalSurface(mesh,(t,u)=>point(t,u),(t,u)=>color(shade,.86+.15*Math.sin(Math.PI*u)+.07*t),rows,columns);
+    botanicalSurface(mesh,(t,u)=>point(t,u,true),()=>color(shade,.77),rows,columns,true);
+    if (!detail) return;
+    for (let i=0;i<9;i++) mesh.branch(center(i/9),center((i+1)/9),.0016,.0012,color(0x9baf72));
+    for (const t of [.25,.43,.61,.76]) for (const sign of [-1,1]) {
+      const end = point(Math.min(.96,t+.13),.5+sign*.43);
+      mesh.branch(center(t),W.add(end,W.mul(facing,.001)),.0009,.00035,color(0x7f9b60));
+    }
+  }
+  function bell(mesh, neck, size, direction, phase = 0) {
+    const axis = W.unit(direction);
     const right = W.unit(W.cross(axis,[0,0,1]));
     const up = W.cross(axis,right);
-    const point = (t, angle, inner = false) => {
-      const radius = size * (.026 + .107 * Math.pow(t,.8)) * (1 + .09 * Math.cos(angle*5) * t*t) - (inner ? .003 : 0);
-      const length = size * (.22*t + .014*Math.cos(angle*5)*t*t*t);
-      return W.add(W.add(neck,W.mul(axis,length)),W.add(W.mul(right,radius*Math.cos(angle)),W.mul(up,radius*Math.sin(angle))));
+    const radial = a => W.add(W.mul(right,Math.cos(a)),W.mul(up,Math.sin(a)));
+    const point = (t,u,inner = false) => {
+      const angle = TAU*u+phase;
+      const lobe = (.5+.5*Math.cos(angle*5))**1.3;
+      const lip = W.clamp((t-.73)/.27,0,1);
+      const radius = size*(.027+.091*Math.sin(Math.min(1,t/.32)*Math.PI/2)
+        -.008*Math.sin(Math.PI*W.clamp((t-.32)/.5,0,1))
+        +.032*lip*lip*lobe+.0015*Math.cos(angle*10)*Math.sin(t*Math.PI))-(inner ? size*.006 : 0);
+      const length = size*(.32*t+.040*lip*lobe-.024*lip**4*lobe);
+      return W.add(W.add(neck,W.mul(axis,length)),W.mul(radial(angle),radius));
     };
-    for (let row = 0; row < 8; row++) {
-      const a = row / 8;
-      const b = (row + 1) / 8;
-      for (let i = 0; i < 30; i++) {
-        const u = TAU * i / 30;
-        const v = TAU * (i + 1) / 30;
-        const tint = .93 + .13 * b + .055 * Math.cos(u*5);
-        mesh.quad(point(a,u),point(a,v),point(b,v),point(b,u),color(0xa6a5d4,tint));
-        mesh.quad(point(a,v,true),point(a,u,true),point(b,u,true),point(b,v,true),color(0xced0ed,.96 + .06*b));
-        if (row === 7) mesh.quad(point(b,u),point(b,v),point(b,v,true),point(b,u,true),color(0xd4cdeb));
-      }
+    const tint = (t,u,inner = false) => {
+      const rib = .5+.5*Math.cos((TAU*u+phase)*10);
+      const base = inner ? 0xdbc9ed : 0xceb6e4;
+      const edge = color(0xb896d3,1.06);
+      const body = color(base, 1.04+.045*rib+.025*Math.sin(t*9+phase));
+      const rim = W.clamp((t-.75)/.25,0,1)*.70;
+      const throat = inner ? (1-W.clamp(t/.6,0,1))*.6 : (1-W.clamp(t/.25,0,1))*.3;
+      return body.map((c,i)=>W.mix(W.mix(c,edge[i],rim),color(0xc7c2a6)[i],throat));
+    };
+    botanicalSurface(mesh,(t,u)=>point(t,u),(t,u)=>tint(t,u),14,40);
+    botanicalSurface(mesh,(t,u)=>point(t,u,true),(t,u)=>tint(t,u,true),14,40,true);
+    for (let i=0;i<40;i++) mesh.quad(point(1,i/40),point(1,(i+1)/40),
+      point(1,(i+1)/40,true),point(1,i/40,true),color(0xd4bde7));
+    // A pale green base and five narrow sepals wrap the bell, rather than a flat star.
+    mesh.branch(W.add(neck,W.mul(axis,-.035*size)),W.add(neck,W.mul(axis,.035*size)),.027*size,.038*size,color(0x718c50));
+    for (let i=0;i<5;i++) {
+      const a = phase+i*TAU/5;
+      const start = W.add(neck,W.mul(radial(a),.017*size));
+      const tip = W.add(W.add(neck,W.mul(axis,.105*size)),W.mul(radial(a),.070*size));
+      foliage(mesh,start,tip,.018*size,0x789956,false);
     }
-    for (let i = 0; i < 4; i++) {
-      const offset = W.add(W.mul(right,.024*Math.cos(i*TAU/4)),W.mul(up,.024*Math.sin(i*TAU/4)));
-      const end = W.add(W.add(neck,W.mul(axis,size*.18)),offset);
-      mesh.branch(W.add(neck,W.mul(axis,.025)),end,.0019,.0024,color(0xd4c88a));
-      mesh.cone(end[0],end[1]-.004,end[2],.006,.003,.012,color(0xe0cc8c),5);
+    // The central style has a three-part stigma; shorter anthers remain inside the cup.
+    const pistil = W.add(neck,W.mul(axis,.245*size));
+    mesh.branch(W.add(neck,W.mul(axis,.020*size)),pistil,.0045*size,.003*size,color(0xded5a4));
+    for (let i=0;i<3;i++) {
+      const end = W.add(W.add(pistil,W.mul(axis,.014*size)),W.mul(radial(i*TAU/3),.010*size));
+      mesh.branch(pistil,end,.004*size,.0045*size,color(0xe6dbad));
+    }
+    for (let i=0;i<5;i++) {
+      const end = W.add(W.add(neck,W.mul(axis,.17*size)),W.mul(radial(i*TAU/5),.037*size));
+      mesh.branch(W.add(neck,W.mul(axis,.04*size)),end,.0017*size,.0023*size,color(0xcac694));
+      mesh.branch(end,W.add(end,W.mul(axis,.014*size)),.004*size,.003*size,color(0xe0c88c));
+    }
+  }
+  function bud(mesh, start, direction, size) {
+    const axis = W.unit(direction);
+    const right = W.unit(W.cross(axis,[0,0,1]));
+    const across = W.cross(axis,right);
+    const point = (t,u) => {
+      const angle = TAU*u;
+      const radius = size*(.004+.036*Math.sin(Math.PI*t)**.75)*(1+.09*Math.cos(angle*5));
+      return W.add(W.add(start,W.mul(axis,t*.17*size)),
+        W.add(W.mul(right,radius*Math.cos(angle)),W.mul(across,radius*Math.sin(angle))));
+    };
+    botanicalSurface(mesh,point,(t,u)=>color(t<.35 ? 0x799455 : 0xb7a0cc,.93+.08*Math.cos(u*TAU*5)),9,20);
+    for (let i=0;i<5;i++) {
+      const a=i*TAU/5;
+      foliage(mesh,start,W.add(W.add(start,W.mul(axis,.084*size)),
+        W.add(W.mul(right,Math.cos(a)*.035*size),W.mul(across,Math.sin(a)*.035*size))),.010*size,0x7d9b59,false);
     }
   }
   function flowers(mesh, x, z, scale) {
@@ -109,25 +186,36 @@ const CabinScene = (() => {
     disc(pot,0,.343,0,.22,color(0x403a29));
     lathe(pot,0,0,0,[[.246,.349],[.254,.355],[.255,.371]],color(0xb4b89a));
     const stems = [
-      {x:-.16,z:.00,h:1.28,lean:-.13},
-      {x:-.34,z:.07,h:1.10,lean:-.34},
-      {x:.03,z:-.04,h:1.48,lean:.02},
-      {x:.25,z:.05,h:1.26,lean:.27},
-      {x:.36,z:.12,h:.96,lean:.34}
+      {x:-.30,z:-.03,h:1.25,axis:[-.32,.92,.26]},
+      {x:-.12,z:-.10,h:1.48,axis:[-.10,.98,.14]},
+      {x:.15,z:-.07,h:1.38,axis:[.28,.93,.20]},
+      {x:.34,z:.02,h:1.10,axis:[.51,.73,.43]},
+      {x:.03,z:.14,h:.94,axis:[-.13,.55,.83]}
     ];
     for (const [index, stem] of stems.entries()) {
       const p0 = [stem.x*.16,.345,stem.z*.3];
       const p1 = [stem.x*.32,.72,stem.z*.7];
-      const p2 = [stem.x-.08,stem.h+.16,stem.z-.07];
+      const p2 = [stem.x*.85,stem.h-.18,stem.z-.03];
       const p3 = [stem.x,stem.h,stem.z];
       const point = t => [0,1,2].map(j => (1-t)**3*p0[j]+3*(1-t)**2*t*p1[j]+3*(1-t)*t*t*p2[j]+t**3*p3[j]);
-      for (let i = 0; i < 15; i++) pot.branch(point(i/15),point((i+1)/15),.0075-i*.00025,.00725-i*.00025,color(0x536946));
-      for (const t of [.27,.46,.63]) {
+      for (let i = 0; i < 16; i++) pot.branch(point(i/16),point((i+1)/16),.009-i*.0003,.0087-i*.0003,color(0x627c48));
+      for (const t of [.24,.42,.59,.76]) {
         const start = point(t);
         const side = (index + Math.round(t*10)) % 2 ? 1 : -1;
-        leaf(pot,start,W.add(start,[side*.22,.09,.07]),.050,0x617e4c);
+        foliage(pot,start,W.add(start,[side*(.19+.05*(1-t)),.07,.055+index*.008]),.044*(1.25-t*.5));
       }
-      bell(pot,p3,index === 2 ? 1 : .83,stem.lean);
+      bell(pot,p3,index===1 ? .92 : .86,stem.axis,index*.31);
+      for (const [j,t] of [.57,.78].entries()) {
+        if (index===4 && j===1) continue;
+        const side = (index+j)%2 ? 1 : -1;
+        const start = point(t);
+        const neck = W.add(start,[side*(j ? .14 : .20),.08,.07+(index%2)*.06]);
+        const elbow = W.add(start,[side*.075,.025,.035]);
+        pot.branch(start,elbow,.005,.004,color(0x67814d));
+        pot.branch(elbow,neck,.004,.0035,color(0x718b52));
+        if (j===1 && index%2===0) bud(pot,neck,[side*.3,.90,.3],.86);
+        else bell(pot,neck,j ? .70 : .79,[side*.40,.48+(j*.2),.72],index*.43+j*.67);
+      }
     }
     for (let i = 0; i < pot.data.length; i += 10) mesh.data.push(
       pot.data[i]*scale+origin[0],pot.data[i+1]*scale+origin[1],pot.data[i+2]*scale+origin[2],...pot.data.slice(i+3,i+10));
@@ -183,7 +271,7 @@ const CabinScene = (() => {
     const target = [0,eyeY,0];
     const half = 7.5*Math.tan(fov*Math.PI/360)*aspect;
     const roomy = W.clamp((aspect-.65)/.9,0,1);
-    const plantX = W.mix(-.48,-.72,roomy)*half;
+    const plantX = W.mix(-.35,-.72,roomy)*half;
     const cupX = .70*half;
     const plantScale = W.mix(.84,1,roomy)*1.2;
     const bookWidth = W.mix(1.15,1.65,roomy)*1.2;
