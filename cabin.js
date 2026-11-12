@@ -312,31 +312,63 @@ const CabinScene = (() => {
     }
     return { eye, target, fov, sill: sill.data, objects: objects.data, shadows: shadows.data, glass: glass.data, steamOrigin };
   }
+  const steamRows = 32, steamColumns = 4;
+  // Reuse both CPU and GPU storage: the fine mist must not allocate meshes every frame.
+  const steamData = new Float32Array(3*2*steamRows*steamColumns*6*10);
+  const steamGrid = new Float32Array((steamRows+1)*(steamColumns+1)*4);
+  const steamTint = color(0xf4eddf);
   function steam(seconds, origin) {
-    const mesh = new W.Mesh();
-    for (let wisp = 0; wisp < 3; wisp++) {
-      const phase = seconds*.21+wisp*2.1;
-      const point = t => [
-        origin[0]+Math.sin(t*7-phase)*(.035+t*.055)+wisp*.015-.015,
-        origin[1]+.02+t*.76,
-        origin[2]+Math.sin(t*4-phase)*.015-t*.025
-      ];
-      for (let i = 0; i < 22; i++) {
-        const a = i/22;
-        const b = (i+1)/22;
-        const vertices = [];
-        for (const t of [a,b]) {
-          const p = point(t);
-          const width = .018+t*.025;
-          const alpha = Math.sin(t*Math.PI)*(.12+.045*Math.sin(phase-t*5));
-          vertices.push({p:W.add(p,[-width,0,0]),a:0},{p,a:alpha},{p:W.add(p,[width,0,0]),a:0});
+    let offset = 0;
+    for (let wisp=0;wisp<3;wisp++) {
+      const phase = wisp*2.14;
+      const time = seconds*(.64+wisp*.035);
+      // Two intersecting soft cross-sections give each tendril depth, not a hard outline.
+      for (const angle of [-.58,.58]) {
+        for (let row=0;row<=steamRows;row++) {
+          const t = row/steamRows;
+          const lift = t*(1.02+wisp*.075);
+          const spread = .012+.075*t*t;
+          const x = origin[0]+(wisp-1)*.065
+            + Math.sin(t*7.2-time+phase)*spread+.035*t*t;
+          const y = origin[1]-.035+lift;
+          const z = origin[2]+(wisp-1)*.024
+            +Math.sin(t*5.6-time*.73+phase)*(.009+.035*t)-.04*t;
+          const width = .019+.052*t*(.82+.18*Math.sin(t*9-time+phase));
+          const appear = W.smooth(W.clamp(t/.13,0,1));
+          const dissolve = (1-t)**1.6;
+          // Brightness packets travel upward; their ends disappear before a new curl forms.
+          const packet = .62+.38*Math.sin(t*10.5-seconds*1.12+phase);
+          const alpha = .17*appear*dissolve*packet;
+          for (let column=0;column<=steamColumns;column++) {
+            const across = column/steamColumns*2-1;
+            const feather = (Math.exp(-3.8*across*across)-Math.exp(-3.8))/(1-Math.exp(-3.8));
+            const i = (row*(steamColumns+1)+column)*4;
+            steamGrid[i] = x+Math.cos(angle)*across*width;
+            steamGrid[i+1] = y;
+            steamGrid[i+2] = z+Math.sin(angle)*across*width;
+            steamGrid[i+3] = alpha*feather*.68;
+          }
         }
-        for (const indices of [[0,3,4],[0,4,1],[1,4,5],[1,5,2]]) {
-          for (const index of indices) mesh.data.push(...vertices[index].p,0,1,0,...color(0xede3cd),-2-vertices[index].a);
+        for (let row=0;row<steamRows;row++) for (let column=0;column<steamColumns;column++) {
+          const a = row*(steamColumns+1)+column;
+          const b = a+steamColumns+1;
+          for (const index of [a,b,b+1,a,b+1,a+1]) {
+            const i = index*4;
+            steamData[offset++] = steamGrid[i];
+            steamData[offset++] = steamGrid[i+1];
+            steamData[offset++] = steamGrid[i+2];
+            steamData[offset++] = 0;
+            steamData[offset++] = 1;
+            steamData[offset++] = 0;
+            steamData[offset++] = steamTint[0];
+            steamData[offset++] = steamTint[1];
+            steamData[offset++] = steamTint[2];
+            steamData[offset++] = -2-steamGrid[i+3];
+          }
         }
       }
     }
-    return mesh.data;
+    return steamData;
   }
   return { create, steam };
 })();

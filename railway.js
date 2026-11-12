@@ -622,6 +622,7 @@
     let cabin = null;
     let cabinAspect = 0;
     const steamBuffer = buffer([],gl.DYNAMIC_DRAW);
+    let steamCapacity = 0;
     function drawTransparent(mesh) {
       gl.enable(gl.BLEND);
       gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
@@ -647,9 +648,13 @@
       draw(cabin.sill);
       drawTransparent(cabin.shadows);
       draw(cabin.objects);
-      const steam = new Float32Array(CabinScene.steam(reducedMotion.matches ? 0 : seconds,cabin.steamOrigin));
+      const steam = CabinScene.steam(reducedMotion.matches ? 0 : seconds,cabin.steamOrigin);
       gl.bindBuffer(gl.ARRAY_BUFFER,steamBuffer.handle);
-      gl.bufferData(gl.ARRAY_BUFFER,steam,gl.DYNAMIC_DRAW);
+      if (steamCapacity !== steam.byteLength) {
+        gl.bufferData(gl.ARRAY_BUFFER,steam.byteLength,gl.DYNAMIC_DRAW);
+        steamCapacity = steam.byteLength;
+      }
+      gl.bufferSubData(gl.ARRAY_BUFFER,0,steam);
       steamBuffer.count = steam.length / 10;
       drawTransparent(steamBuffer);
     }
@@ -700,7 +705,7 @@
       const resolution = Math.min(devicePixelRatio || 1, 1.6);
       const width = Math.max(1, Math.round(root.clientWidth * resolution));
       const height = Math.max(1, Math.round(root.clientHeight * resolution));
-      const renderKey = [minute, width, height, view, overheadMode, isFreeView() && freeFrame?.target.join(), view === 'aerial' && motionSeconds].join();
+      const renderKey = [minute, width, height, view, overheadMode, isFreeView() && freeFrame?.target.join(), motionSeconds].join();
       if (renderKey === lastRender) return;
       lastRender = renderKey;
       if (canvas.width !== width || canvas.height !== height) {
