@@ -94,6 +94,9 @@ h1{font:600 clamp(19px,2.4vw,31px)/1.14 "Songti SC","SimSun",serif;letter-spacin
 .install-panel .install-status{font-size:12px;color:var(--muted);margin:7px 4px 0;overflow-wrap:anywhere}
 .install-status:empty{display:none}
 .update-app{color:var(--gold);border-top:1px solid var(--line)}
+.update-status{font-size:12px;line-height:1.6;color:var(--muted);margin:0 11px 8px}
+.update-status:empty{display:none}
+.has-update .menu-toggle::after{content:"";position:absolute;width:7px;height:7px;border-radius:50%;background:var(--gold);top:8px;right:8px;box-shadow:0 0 7px #efd29980}
 .camera-panel label{min-height:44px;display:flex;align-items:center;gap:9px;padding:0 8px;border-radius:6px;font-size:13px;cursor:pointer}
 .camera-panel label:hover,.camera-panel label:has(input:checked){background:#eed9a51c}
 .camera-panel input{accent-color:var(--gold);width:15px;height:15px;margin:0}

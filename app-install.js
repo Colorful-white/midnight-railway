@@ -7,6 +7,9 @@
   const installStatus = byId('install-status');
   const offlineStatus = byId('offline-status');
   const updateButton = byId('update-app');
+  const checkButton = byId('check-update');
+  const updateStatus = byId('update-status');
+  const root = byId('journey');
   const standalone = matchMedia('(display-mode: standalone)');
   const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -17,6 +20,13 @@
   let installPrompt = null;
   let waitingWorker = null;
   let reloadRequested = false;
+  let registration = null;
+  let checking = false;
+  let manualCheck = false;
+  let lastCheckAt = 0;
+  let needsReload = false;
+  let previousController = navigator.serviceWorker?.controller;
+  const observedWorkers = new WeakSet();
 
   function showInstructions(message, instructions) {
     intro.textContent = message;
@@ -102,11 +112,72 @@
   });
 
   if (!('serviceWorker' in navigator) || !webAddress || !window.isSecureContext) return;
-  function showUpdate(registration) {
-    waitingWorker = navigator.serviceWorker.controller ? registration.waiting : null;
-    updateButton.hidden = !waitingWorker;
+  function showUpdate() {
+    waitingWorker = registration?.active ? registration.waiting : null;
+    const ready = needsReload || Boolean(waitingWorker);
+    root.classList.toggle('has-update', ready);
+    byId('menu-toggle').title = ready ? '有新版本，打开菜单更新' : '功能菜单';
+    updateButton.hidden = !ready;
+    checkButton.hidden = ready;
+    checkButton.disabled = checking || Boolean(registration?.installing);
+    checkButton.textContent = checkButton.disabled ? '正在检查更新…' : '检查更新';
+    if (ready) {
+      updateButton.disabled = false;
+      updateButton.textContent = needsReload ? '新版已就绪 · 点此刷新' : '新版已准备好 · 点此更新';
+      updateStatus.textContent = '准备好后点击更新，即可看到新画面。';
+      manualCheck = false;
+    }
+  }
+  function observeWorker(worker) {
+    if (!worker || observedWorkers.has(worker)) return;
+    observedWorkers.add(worker);
+    worker.addEventListener('statechange', () => {
+      showUpdate();
+      if (!manualCheck) return;
+      if (worker.state === 'redundant') {
+        updateStatus.textContent = '新版下载未完成，请稍后再检查。';
+        manualCheck = false;
+      } else if (worker.state === 'activated') {
+        updateStatus.textContent = '已经是最新版本。';
+        manualCheck = false;
+      }
+    });
+  }
+  async function checkForUpdates(manual = false) {
+    if (!registration) return;
+    if (manual) manualCheck = true;
+    if (checking) return;
+    if (!navigator.onLine) {
+      if (manual) updateStatus.textContent = '当前处于离线状态，联网后可以检查更新。';
+      manualCheck = false;
+      return;
+    }
+    if (!manual && Date.now() - lastCheckAt < 30000) return;
+    lastCheckAt = Date.now();
+    checking = true;
+    if (manual) updateStatus.textContent = '正在检查…';
+    showUpdate();
+    try {
+      await registration.update();
+      observeWorker(registration.installing);
+      showUpdate();
+      if (manualCheck) {
+        updateStatus.textContent = registration.installing ? '正在下载新版，请稍候…' : '已经是最新版本。';
+        if (!registration.installing) manualCheck = false;
+      }
+    } catch {
+      if (manualCheck) updateStatus.textContent = '暂时连不上更新服务，请稍后重试。';
+      manualCheck = false;
+    } finally {
+      checking = false;
+      showUpdate();
+    }
   }
   updateButton.addEventListener('click', () => {
+    if (needsReload) {
+      location.reload();
+      return;
+    }
     if (!waitingWorker) return;
     reloadRequested = true;
     updateButton.disabled = true;
@@ -114,19 +185,39 @@
     waitingWorker.postMessage({ type: 'APPLY_UPDATE' });
   });
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!reloadRequested) return;
-    reloadRequested = false;
-    location.reload();
+    const controller = navigator.serviceWorker.controller;
+    if (reloadRequested) {
+      reloadRequested = false;
+      location.reload();
+      return;
+    }
+    if (previousController && controller !== previousController) needsReload = true;
+    previousController = controller;
+    showUpdate();
   });
-  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(registration => {
-    showUpdate(registration);
+  checkButton.addEventListener('click', () => checkForUpdates(true));
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(currentRegistration => {
+    registration = currentRegistration;
+    showUpdate();
+    observeWorker(registration.installing);
     registration.addEventListener('updatefound', () => {
-      const worker = registration.installing;
-      worker?.addEventListener('statechange', () => {
-        if (['installed', 'activated', 'redundant'].includes(worker.state)) showUpdate(registration);
+      observeWorker(registration.installing);
+      showUpdate();
+    });
+    window.addEventListener('online', () => checkForUpdates());
+    window.addEventListener('focus', () => checkForUpdates());
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) checkForUpdates();
+    });
+    byId('menu-toggle').addEventListener('click', () => {
+      queueMicrotask(() => {
+        if (byId('menu-toggle').getAttribute('aria-expanded') === 'true') checkForUpdates();
       });
     });
-    window.addEventListener('online', () => registration.update().catch(() => {}));
+    setInterval(() => {
+      if (!document.hidden) checkForUpdates();
+    }, 60000);
+    checkForUpdates();
     navigator.serviceWorker.ready.then(() => {
       offlineStatus.textContent = '已备好离线观景。首次添加后，请打开一次桌面图标。';
     });
