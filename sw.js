@@ -1,7 +1,7 @@
 const CACHE_PREFIX = 'midnight-railway-personal-';
 const CACHE_NAME = CACHE_PREFIX + '__ASSET_VERSION__';
 const APP_FILES = [
-  './', './index.html', './railway.css', './launch.js', './railway.js', './world.js', './cabin.js', './app-install.js',
+  './', './index.html', './railway.css', './launch.js', './railway.js', './world.js', './mint-sea.js', './cabin.js', './app-install.js',
   './manifest.webmanifest', './icons/journey-192.png', './icons/journey-512.png',
   './icons/journey-maskable-512.png', './icons/journey-apple-180.png'
 ];

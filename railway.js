@@ -451,31 +451,33 @@
     uniform mat4 projection, camera;
     uniform vec3 offset, sun;
     uniform vec2 heading;
+    uniform float modelScale;
     uniform mediump float pointScale;
     varying vec3 shade;
-    varying vec3 location;
+    varying vec3 location, seaPosition;
     varying float depth, emission;
     vec3 rotate(vec3 p) {
       return vec3(heading.x*p.x-heading.y*p.z,p.y,heading.y*p.x+heading.x*p.z);
     }
     void main() {
-      vec3 world = rotate(position) + offset;
+      vec3 world = rotate(position * modelScale) + offset;
       vec4 point = camera * vec4(world, 1.0);
       float diffuse = max(dot(rotate(normal), sun), 0.0);
       shade = color * (0.64 + 0.49 * diffuse);
       emission = glow;
       depth = length(point.xyz);
       location = world;
+      seaPosition = world - vec3(${W.sea.x.toFixed(1)},0.0,${W.sea.z.toFixed(1)});
       gl_Position = projection * point;
       gl_PointSize = clamp(normal.x * pointScale / max(.1, -point.z), 1.0, 40.0);
     }`;
   const fragmentSource = `
     precision mediump float;
     uniform vec3 light, mist;
-    uniform float night, fogStart, rippleTime;
+    uniform float night, fogStart, fogRange, rippleTime, aquarium;
     uniform mediump float pointScale;
     varying vec3 shade;
-    varying vec3 location;
+    varying vec3 location, seaPosition;
     varying float depth, emission;
     void main() {
       if (pointScale > 0.0) {
@@ -484,7 +486,14 @@
         return;
       }
       if (emission < -1.5) {
-        gl_FragColor = vec4(shade * light, clamp(-emission - 2.0, 0.0, 1.0));
+        float alpha = clamp(-emission - 2.0, 0.0, 1.0);
+        vec3 transparentColor = shade * light;
+        if (alpha>.13 && alpha<.15 && abs(seaPosition.y-${W.sea.surface.toFixed(1)})<.03 && abs(seaPosition.x)<190.0 && abs(seaPosition.z)<140.0) {
+          float shine = smoothstep(.91,1.0,sin(seaPosition.x*.35+sin(seaPosition.z*.22)+rippleTime*.1));
+          transparentColor += vec3(.10,.14,.13)*shine;
+          alpha += shine*.035;
+        }
+        gl_FragColor = vec4(transparentColor, alpha);
         return;
       }
       vec3 lamp = vec3(1.0, .76, .41);
@@ -502,8 +511,15 @@
         float spill = max(0.0, 1.0 - length(vec2(lampX, across)) * .16);
         color += lamp * spill * spill * (.06 + night * .28);
       }
-      float air = smoothstep(fogStart, fogStart + 220.0, depth) * .72;
-      air *= clamp(1.05 - location.y * .009, .74, 1.1);
+      if (aquarium > .05 && seaPosition.y < -6.8) {
+        vec2 uv = seaPosition.xz * .42;
+        float wave = sin(uv.x + sin(uv.y * 1.4) + rippleTime * .6) * sin(uv.y + sin(uv.x * 1.3) - rippleTime * .5);
+        float caustic = pow(max(0.0,1.0 - abs(wave) * 3.2),4.0);
+        color += vec3(.13,.17,.12) * caustic * aquarium;
+      }
+      float air = smoothstep(fogStart, fogStart + fogRange, depth) * .72;
+      air = mix(air,smoothstep(fogStart,fogStart+fogRange,depth)*.999,aquarium);
+      air *= mix(clamp(1.05 - location.y * .009, .74, 1.1),1.0,aquarium);
       gl_FragColor = vec4(mix(color, mist, air), 1.0);
     }`;
 
@@ -522,7 +538,7 @@
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
     gl.useProgram(program);
-    const uniforms = Object.fromEntries(['projection','camera','offset','sun','heading','light','mist','night','fogStart','rippleTime','pointScale']
+    const uniforms = Object.fromEntries(['projection','camera','offset','sun','heading','modelScale','light','mist','night','fogStart','fogRange','aquarium','rippleTime','pointScale']
       .map(name => [name, gl.getUniformLocation(program,name)]));
     const attributes = ['position','normal','color','glow'].map(name => gl.getAttribLocation(program,name));
     for (const location of attributes) gl.enableVertexAttribArray(location);
@@ -585,9 +601,10 @@
     }
     const vaporData = new Float32Array(12 * 10);
     const vapor = buffer(vaporData, gl.DYNAMIC_DRAW);
-    function draw(mesh, offset = [0,0,0], heading = [1,0,0], mode = gl.TRIANGLES) {
+    function draw(mesh, offset = [0,0,0], heading = [1,0,0], mode = gl.TRIANGLES, scale = 1) {
       gl.uniform3fv(uniforms.offset, offset);
       gl.uniform2f(uniforms.heading, heading[0], heading[2]);
+      gl.uniform1f(uniforms.modelScale,scale);
       gl.bindBuffer(gl.ARRAY_BUFFER, mesh.handle);
       attributes.forEach((attribute, i) => gl.vertexAttribPointer(attribute, i === 3 ? 1 : 3, gl.FLOAT, false, 40, i * 12));
       gl.drawArrays(mode, 0, mesh.count);
@@ -623,11 +640,11 @@
     let cabinAspect = 0;
     const steamBuffer = buffer([],gl.DYNAMIC_DRAW);
     let steamCapacity = 0;
-    function drawTransparent(mesh) {
+    function drawTransparent(mesh, offset, heading, scale = 1) {
       gl.enable(gl.BLEND);
       gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
       gl.depthMask(false);
-      draw(mesh);
+      draw(mesh,offset,heading,gl.TRIANGLES,scale);
       gl.depthMask(true);
       gl.disable(gl.BLEND);
     }
@@ -644,6 +661,7 @@
       gl.uniformMatrix4fv(uniforms.camera,false,viewMatrix(cabin.eye,cabin.target));
       gl.uniform3fv(uniforms.light,sky.light.map((value,i) => W.mix([.95,.89,.78][i],value,.28)));
       gl.uniform1f(uniforms.fogStart,1000);
+      gl.uniform1f(uniforms.aquarium,0);
       drawTransparent(cabin.glass);
       draw(cabin.sill);
       drawTransparent(cabin.shadows);
@@ -658,9 +676,52 @@
       steamBuffer.count = steam.length / 10;
       drawTransparent(steamBuffer);
     }
+    let sea = null;
+    const rayBuffer = buffer([],gl.DYNAMIC_DRAW);
+    function prepareSea() {
+      if (sea) return;
+      const model = MintSea.create();
+      sea = Object.fromEntries(['reef','frames','glass','water','light','jelly','bubble'].map(key=>[key,buffer(model[key])]));
+      sea.fish = model.fish.map(fish=>({body:buffer(fish.body),tail:buffer(fish.tail)}));
+    }
+    function drawSeaAnimals(seconds) {
+      for (const fish of MintSea.fish(seconds)) {
+        const model=sea.fish[fish.kind];
+        draw(model.body,fish.position,fish.heading,gl.TRIANGLES,fish.size);
+        const pivot=W.add(fish.position,W.mul(fish.heading,-.75*fish.size));
+        const a=Math.atan2(fish.heading[2],fish.heading[0])+fish.tail;
+        draw(model.tail,pivot,[Math.cos(a),0,Math.sin(a)],gl.TRIANGLES,fish.size);
+      }
+      const ray=MintSea.ray(seconds);
+      gl.bindBuffer(gl.ARRAY_BUFFER,rayBuffer.handle);
+      gl.bufferData(gl.ARRAY_BUFFER,ray.data,gl.DYNAMIC_DRAW);
+      rayBuffer.count=ray.data.length/10;
+      draw(rayBuffer,ray.position,ray.heading);
+    }
+    function drawSeaGlass(seconds) {
+      drawTransparent(sea.glass);
+      drawTransparent(sea.light);
+      for(const [index,[x,z,y]] of [[58,-58,-1.7],[-15,-55,-1.2],[-91,76,-2.0]].entries()) {
+        const pulse=1+.055*Math.sin(seconds*.78+index*2);
+        drawTransparent(sea.jelly,[W.sea.x+x,y+Math.sin(seconds*.25+index)*.35,W.sea.z+z],undefined,pulse);
+      }
+      for(let i=0;i<18;i++) {
+        const t=W.wrap(seconds*.075+i*.173,1),group=i%2;
+        drawTransparent(sea.bubble,[W.sea.x+(group ? -57 : 78)+Math.sin(t*6+i)*.5,
+          -9.2+t*11,W.sea.z+(group ? 66 : -39)+Math.cos(t*7+i)*.3],undefined,.045+(i%3)*.025);
+      }
+      drawTransparent(sea.water);
+    }
     let lastSky = '';
     return function render(minute, distance, cam, aspect, seconds) {
-      const sky = lighting(minute);
+      const ordinarySky = lighting(minute);
+      const seaAmount = MintSea.influence(cam.target);
+      const underwater = view==='cabin' ? seaAmount*W.smooth(W.clamp((W.sea.surface-cam.eye[1])/3.2,0,1)) : 0;
+      const sky = { top:blend(ordinarySky.top,[49,119,142],underwater),
+        horizon:blend(ordinarySky.horizon,[124,188,186],underwater),
+        light:blend(ordinarySky.light,[.94,1.02,.99],seaAmount*.94),
+        night:W.mix(ordinarySky.night,.24,seaAmount) };
+      const nearSea = Math.hypot(cam.target[0]-W.sea.x,cam.target[2]-W.sea.z)<430;
       const rgb = values => values.map(Math.round).join(',');
       const backdrop = 'linear-gradient(rgb(' + rgb(sky.top) + '),rgb(' + rgb(sky.horizon) + ') 69%)';
       if (lastSky !== backdrop) {
@@ -675,16 +736,25 @@
       gl.uniform3fv(uniforms.light, sky.light);
       gl.uniform3fv(uniforms.mist, sky.horizon.map(v => v / 255));
       gl.uniform1f(uniforms.night, sky.night);
-      gl.uniform1f(uniforms.fogStart, view === 'aerial' ? 86 : 25);
-      gl.uniform1f(uniforms.rippleTime, minute * .47);
+      gl.uniform1f(uniforms.fogStart, underwater>.1 ? 12 : view === 'aerial' ? 86 : 25);
+      gl.uniform1f(uniforms.fogRange,W.mix(220,60,underwater));
+      gl.uniform1f(uniforms.aquarium,underwater);
+      gl.uniform1f(uniforms.rippleTime, minute * .47+seaAmount*seconds*.25);
       for (const mesh of localScenery(cam.target)) draw(mesh);
+      if (nearSea) {
+        prepareSea();
+        draw(sea.reef);draw(sea.frames);
+        drawSeaAnimals(reducedMotion.matches ? 0 : seconds);
+      }
       if (view === 'aerial') {
         for (let i = 0; i < 4; i++) {
           const d = distance - i * 3.8;
           draw(i ? coach : engine, W.position(d), W.heading(d));
         }
         drawVapor(minute, seconds, cam.fov);
-      } else drawCabin(aspect,sky,seconds);
+      }
+      if (nearSea) drawSeaGlass(reducedMotion.matches ? 0 : seconds);
+      if (view==='cabin') drawCabin(aspect,sky,seconds);
     };
   }
 

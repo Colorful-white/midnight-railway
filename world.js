@@ -24,10 +24,12 @@ const RailwayWorld = (() => {
   const stops = [
     { name: '零点小站', minute: 0, duration: 20 / 69 },
     { name: '空心巨树', minute: 500, duration: 32 / 69 },
-    { name: '浮灯水城', minute: 1122, duration: 72 / 69 }
+    { name: '浮灯水城', minute: 1122, duration: 72 / 69 },
+    { name: '薄荷海', minute: 1362, duration: 6 }
   ];
   const tree = { x: -108, z: -32 };
   const lake = { x: 95, z: -6 };
+  const sea = { x: 8910, z: 572, surface: 3.2, floor: -11.5, startNode: 0, endNode: 0 };
   const controls = [];
   function rail(x, z, height = 0.7) {
     controls.push([x, height, z]);
@@ -35,7 +37,7 @@ const RailwayWorld = (() => {
   }
   // Ordinary stretches carry most of the day's mileage. Their long curves
   // leave the hand-built landmarks at the same scale as the original railway.
-  function countryLine(x, z, dx, dz, reach, separation) {
+  function countryLine(x, z, dx, dz, reach, separation, diversion = null) {
     const bend = separation / 2;
     const point = (forward, side) => rail(x + dx * forward - dz * side, z + dz * forward + dx * side);
     const sway = d => Math.sin(d * .0027) * 102 + Math.sin(d * .0051) * 32;
@@ -49,8 +51,14 @@ const RailwayWorld = (() => {
       const angle = Math.PI * i / 12;
       point(reach + bend * Math.sin(angle), bend * (1 - Math.cos(angle)));
     }
+    let diverted = false;
     for (let i = segments; i >= 0; i--) {
       const d = reach * i / segments;
+      if (diversion && d <= diversion.entry && d >= diversion.exit) {
+        if (!diverted) diversion.build();
+        diverted = true;
+        continue;
+      }
       point(d, separation + offset(d) * .77);
     }
   }
@@ -84,7 +92,23 @@ const RailwayWorld = (() => {
   rail(119, -38, 5.85); rail(142, -38, 5.75); rail(163, -25, 3.8);
   const east = rail(172, 5);
   rail(196, 34); rail(254, 54); rail(329, 62);
-  countryLine(410, 62, 1, 0, 15700, 510);
+  countryLine(410, 62, 1, 0, 15700, 510, { entry: 8750, exit: 8250, build() {
+    sea.startNode = rail(sea.x+250,sea.z-60,5);
+    rail(sea.x+192,sea.z-52,5); rail(sea.x+150,sea.z-45,4.8);
+    rail(sea.x+124,sea.z-40,1.1); rail(sea.x+104,sea.z-33,-3.1);
+    stops[3].node = rail(sea.x+85,sea.z-25,-5.8);
+    rail(sea.x+47,sea.z-12,-5.8); rail(sea.x+3,sea.z+1,-5.8);
+    rail(sea.x-40,sea.z+12,-5.8);
+    for (let i=1;i<=24;i++) {
+      const t=i/24, angle=-1.1+TAU*t, radius=mix(34,27,t);
+      rail(sea.x-55+Math.cos(angle)*radius,sea.z+42+Math.sin(angle)*radius,
+        -5.8+6.2*smooth(clamp((t-.73)/.27,0,1)));
+    }
+    rail(sea.x-72,sea.z+2,.55); rail(sea.x-110,sea.z-18,1.2);
+    stops[3].endNode = rail(sea.x-145,sea.z-32,3.8);
+    rail(sea.x-188,sea.z-41,5.1);
+    sea.endNode = rail(sea.x-250,sea.z-45,5.1);
+  }});
   const south = rail(323, 572);
   rail(246, 552); rail(183, 507); rail(141, 435); rail(120, 356);
   rail(111, 270); rail(125, 192); rail(126, 134); rail(103, 88);
@@ -117,6 +141,10 @@ const RailwayWorld = (() => {
     { minute: stops[1].minute + stops[1].duration, distance: nodeDistances[stops[1].endNode] },
     stops[2],
     { minute: stops[2].minute + stops[2].duration, distance: nodeDistances[stops[2].endNode] },
+    { minute: 1360, distance: nodeDistances[sea.startNode] },
+    stops[3],
+    { minute: stops[3].minute + stops[3].duration, distance: nodeDistances[stops[3].endNode] },
+    { minute: 1370, distance: nodeDistances[sea.endNode] },
     { minute: DAY, distance: total }
   ];
 
@@ -150,12 +178,15 @@ const RailwayWorld = (() => {
     { name: '风谷', node: valley },
     { name: '浮灯水城', node: stops[2].node },
     { name: '东岸高架', node: east },
+    { name: '薄荷海', node: sea.startNode },
+    { name: '海岸归途', node: sea.endNode },
     { name: '南岸原野', node: south }
   ].map((chapter, index) => ({ ...chapter, index, distance: nodeDistances[chapter.node] }));
   const featureShots = [
     { stop: stops[0], aim: [-49, 0, 76], radius: 54, before: 24, after: 28 },
     { stop: stops[1], aim: [-112, 7, -31], radius: 61, before: 16, after: 26 },
-    { stop: stops[2], aim: [97, 0, -6], radius: 94, before: 27, after: 0 }
+    { stop: stops[2], aim: [97, 0, -6], radius: 94, before: 27, after: 0 },
+    { stop: stops[3], aim: [sea.x,-3,sea.z], radius: 126, before: 24, after: 24 }
   ].map(({stop, aim, radius, before, after}) => ({
     start: stop.distance - before, end: (nodeDistances[stop.endNode] ?? stop.distance) + after, aim, radius
   }));
@@ -213,7 +244,10 @@ const RailwayWorld = (() => {
     const country = 12 * (.5 + .5 * Math.sin(x * .021 + z * .013)) ** 3
       + 8 * (.5 + .5 * Math.cos(z * .033 - x * .011)) ** 2
       + 3 * (.5 + .5 * Math.sin(x * .061 - z * .044));
-    return -0.5 + 0.36 * Math.sin(x * 0.105 + z * 0.07) + 0.34 * Math.cos(z * 0.13) + farHills - hollow + outer * country;
+    const ordinary = -0.5 + 0.36 * Math.sin(x * 0.105 + z * 0.07) + 0.34 * Math.cos(z * 0.13) + farHills - hollow + outer * country;
+    const basin = Math.hypot((x-sea.x)/190,(z-sea.z)/140);
+    const depth = 1-smooth(clamp((basin-.65)/.45,0,1));
+    return mix(ordinary,sea.floor+.28*Math.sin(x*.13)*Math.cos(z*.11),depth);
   }
   const ground = new Mesh();
   const scenery = new Mesh();
@@ -223,7 +257,9 @@ const RailwayWorld = (() => {
   function groundCell(mesh, x, z) {
     const [a, b, c, d] = [[x,z], [x,z+step], [x+step,z+step], [x+step,z]].map(([px,pz]) => [px,terrain(px,pz),pz]);
     const distance = Math.hypot((x - lake.x) / 65, (z - lake.z) / 62);
-    const base = distance > 0.97 && distance < 1.09 ? 0x958b64 : x < -36 ? 0x56694c : 0x748061;
+    const basin = Math.hypot((x-sea.x)/190,(z-sea.z)/140);
+    const base = basin < .94 ? (Math.sin(x*.17+z*.08)>.3 ? 0xc9d9c8 : 0xb9d5c9)
+      : basin<1.15 ? 0xe2d8bb : distance > 0.97 && distance < 1.09 ? 0x958b64 : x < -36 ? 0x56694c : 0x748061;
     const shade = 0.96 + 0.09 * Math.sin(x * .037 + z * .09) + between(0.01, 0.07);
     mesh.triangle(a, b, c, tint(base, shade));
     mesh.triangle(a, c, d, tint(base, shade * between(.95, 1.05)));
@@ -441,16 +477,19 @@ const RailwayWorld = (() => {
     const mesh = new Mesh();
     for (let d = section.start; d < section.end; d += 1) {
       const end = Math.min(d + 1, section.end);
-      railStrip(mesh, d, end, 0, 2.25, -.13, tint(0x776855));
-      railStrip(mesh, d, Math.min(d + .28, end), 0, 1.92, -.07, tint(0x3e3730));
-      for (const side of [-1, 1]) railStrip(mesh, d, end, side * .59, .15, 0, tint(0xc7bd9d));
+      const undersea = d>=stops[3].distance && d<=nodeDistances[stops[3].endNode];
+      railStrip(mesh, d, end, 0, 2.25, -.13, tint(undersea ? 0x9db9b0 : 0x776855));
+      railStrip(mesh, d, Math.min(d + .28, end), 0, 1.92, -.07, tint(undersea ? 0x9e967e : 0x3e3730));
+      for (const side of [-1, 1]) railStrip(mesh, d, end, side * .59, .15, 0, tint(undersea ? 0xe6d6af : 0xc7bd9d));
     }
     for (let d = Math.ceil(section.start / 5.5) * 5.5; d < section.end; d += 5.5) {
       const [x,y,z] = position(d);
       const floor = terrain(x, z);
       if (y - floor > 2.05) {
-        mesh.box(x, floor, z, .66, y - floor - .14, .66, tint(0x7f7969));
-        mesh.box(x, y - .38, z, 2.1, .27, 1.1, tint(0x8d8776));
+        const undersea = d>=stops[3].distance && d<=nodeDistances[stops[3].endNode];
+        const width = undersea ? .40 : .66;
+        mesh.box(x, floor, z, width, y - floor - .14, width, tint(undersea ? 0xc8cdbd : 0x7f7969));
+        mesh.box(x, y - .38, z, 2.1, .27, 1.1, tint(undersea ? 0xc4c6b4 : 0x8d8776));
       }
     }
     return mesh.data;
@@ -471,7 +510,7 @@ const RailwayWorld = (() => {
     for (let i = 0; i < 86; i++) {
       const x = left + between(0, tileSize);
       const z = north + between(0, tileSize);
-      if (insideCore(x, z) || nearRail(x, z, 4.8)) continue;
+      if (insideCore(x, z) || nearRail(x, z, 4.8) || Math.hypot((x-sea.x)/190,(z-sea.z)/140)<1.13) continue;
       const woods = Math.sin(x * .019 + z * .028) + Math.cos(z * .043 - x * .011);
       const meadow = x > 310 && z > 100;
       if (woods > (meadow ? .78 : -.12)) {
@@ -507,6 +546,6 @@ const RailwayWorld = (() => {
   }
 
   return { Mesh, DAY, clamp, wrap, mix, smooth, add, sub, mul, dot, cross, unit, stops, chapters, featureShots,
-    total, distanceAt, position, heading, core, tileSize, railSections, railMesh, countryMesh, terrain: ground.data, scenery: scenery.data,
+    total, distanceAt, position, heading, core, sea, groundHeight:terrain, tileSize, railSections, railMesh, countryMesh, terrain: ground.data, scenery: scenery.data,
     engine: trainCar(true), coach: trainCar(false) };
 })();
