@@ -1,13 +1,12 @@
-import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, copyFile, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const files = [
-  'index.html', 'railway.css', 'railway.js', 'world.js', 'app-install.js', 'manifest.webmanifest',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
-  'assets/cabin/bellflowers.png', 'assets/cabin/book-and-tea.png'
+  'index.html', 'railway.css', 'railway.js', 'world.js', 'cabin.js', 'app-install.js', 'manifest.webmanifest',
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'
 ];
 const hash = createHash('sha256');
 for (const file of [...files, 'sw.js']) {
@@ -15,6 +14,9 @@ for (const file of [...files, 'sw.js']) {
   hash.update(await readFile(path.join(root, file)));
 }
 const version = hash.digest('hex').slice(0, 16);
+const output = path.resolve(root, 'dist');
+if (path.dirname(output) !== root) throw new Error('Build output must stay inside the project.');
+await rm(output, { recursive: true, force: true });
 for (const file of files) {
   const target = path.join(root, 'dist', file);
   await mkdir(path.dirname(target), { recursive: true });

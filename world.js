@@ -506,7 +506,7 @@ const RailwayWorld = (() => {
     return m.data;
   }
 
-  return { DAY, clamp, wrap, mix, smooth, add, sub, mul, dot, cross, unit, stops, chapters, featureShots,
+  return { Mesh, DAY, clamp, wrap, mix, smooth, add, sub, mul, dot, cross, unit, stops, chapters, featureShots,
     total, distanceAt, position, heading, core, tileSize, railSections, railMesh, countryMesh, terrain: ground.data, scenery: scenery.data,
     engine: trainCar(true), coach: trainCar(false) };
 })();

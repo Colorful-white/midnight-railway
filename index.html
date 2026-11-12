@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="railway.css">
   <script defer src="app-install.js"></script>
   <script defer src="world.js"></script>
+  <script defer src="cabin.js"></script>
   <script defer src="railway.js"></script>
 </head>
 <body>
@@ -23,25 +24,6 @@
     <canvas id="world" aria-label="随本地时间行驶的微缩铁路"></canvas>
     <div class="vignette" aria-hidden="true"></div>
     <div class="carriage" aria-hidden="true"><div></div></div>
-    <div class="cabin-details" aria-hidden="true">
-      <div class="window-sill"></div>
-      <img class="bellflowers" src="assets/cabin/bellflowers.png" width="1254" height="1254" alt="" draggable="false">
-      <div class="reading-corner">
-        <img src="assets/cabin/book-and-tea.png" width="1536" height="1024" alt="" draggable="false">
-        <svg class="tea-steam" viewBox="0 0 100 180" aria-hidden="true">
-          <defs>
-            <linearGradient id="steam-fade" x1="0" y1="1" x2="0" y2="0">
-              <stop stop-color="#fff1d6" stop-opacity=".14"/>
-              <stop offset=".28" stop-color="#fff5e7" stop-opacity=".66"/>
-              <stop offset="1" stop-color="#f9efe5" stop-opacity="0"/>
-            </linearGradient>
-          </defs>
-          <path class="steam-wisp" d="M47 175C25 151 71 132 49 109S26 71 47 47 55 18 44 2"/>
-          <path class="steam-wisp" d="M58 177C81 149 39 132 58 108S77 69 57 47 47 18 62 1"/>
-          <path class="steam-wisp" d="M37 174C17 151 54 131 37 108S22 70 40 46 43 17 31 0"/>
-        </svg>
-      </div>
-    </div>
     <header class="masthead">
       <svg id="planet" viewBox="0 0 100 100" role="img" aria-labelledby="planet-title">
         <title id="planet-title">环线星球，细线是轨道，光点是列车位置</title>
@@ -117,15 +99,15 @@
       <button id="check-update" class="feature-entry" type="button" hidden>检查更新</button>
       <button id="update-app" class="feature-entry update-app" type="button" hidden>新版已准备好 · 点此更新</button>
       <p id="update-status" class="update-status" role="status" aria-live="polite"></p>
+      <div class="menu-actions" role="group" aria-label="播放与显示">
+        <button id="freeze" type="button" aria-label="暂停画面" aria-pressed="false" title="暂停画面"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="freeze-icon" d="M9 5v14m6-14v14"/></svg><span id="freeze-label">暂停</span></button>
+        <button id="fullscreen" type="button" aria-label="全屏" title="全屏"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5"/></svg><span id="fullscreen-label">全屏</span></button>
+      </div>
     </section>
     <nav class="controls" aria-label="观景控制">
       <div class="views" role="group" aria-label="镜头">
         <button id="aerial" type="button" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 16 6-9 4 5 3-3 5 7H3Z"/><circle cx="17.5" cy="5.5" r="1.5"/></svg>俯视</button>
         <button id="window" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3.5" width="16" height="17" rx="4"/><path d="M4 15h16m-10 0 3-5 4 5"/></svg>车窗</button>
-      </div>
-      <div class="actions">
-        <button id="freeze" class="icon" type="button" aria-label="暂停画面" aria-pressed="false" title="暂停画面"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="freeze-icon" d="M9 5v14m6-14v14"/></svg></button>
-        <button id="fullscreen" class="icon" type="button" aria-label="全屏" title="全屏"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5"/></svg></button>
       </div>
     </nav>
     <p id="failure" class="failure" hidden></p>

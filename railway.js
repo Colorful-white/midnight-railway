@@ -234,6 +234,7 @@
   function setMenu(open) {
     if (open) setDepartures(false);
     menu.hidden = !open;
+    root.classList.toggle('is-menu-open', open);
     menuToggle.setAttribute('aria-expanded', String(open));
     if (open && !experiencePanel.hidden) syncExperienceClock(activeMinute());
   }
@@ -312,11 +313,11 @@
       experience.started = now;
     }
     paused = next;
-    root.classList.toggle('is-paused', paused);
     if (paused) frozenMinute = localMinute();
     freeze.setAttribute('aria-pressed', String(paused));
     freeze.setAttribute('aria-label', paused ? '继续播放' : '暂停画面');
     freeze.title = paused ? '继续播放' : '暂停画面';
+    byId('freeze-label').textContent = paused ? '继续' : '暂停';
     byId('freeze-icon').setAttribute('d', paused ? 'm8 5 11 7-11 7V5Z' : 'M9 5v14m6-14v14');
   }
   setPaused(paused);
@@ -336,6 +337,7 @@
     const label = document.fullscreenElement ? '退出全屏' : '全屏';
     fullscreen.setAttribute('aria-label', label);
     fullscreen.title = label;
+    byId('fullscreen-label').textContent = label;
   });
 
   const lightCycle = [
@@ -381,7 +383,7 @@
       const forward = W.heading(d);
       const side = [-forward[2], 0, forward[0]];
       const eye = W.add(W.add(at, [0, 1.28, 0]), W.mul(side, .63));
-      const target = W.add(W.add(eye, W.mul(side, 20)), W.add(W.mul(forward, 3.4), [0, 1.35, 0]));
+      const target = W.add(W.add(eye, W.mul(side, 20)), W.mul(forward, 3.4));
       return { eye, target, chapter, fov: aspect < 1 ? 79 : 56 };
     }
     if (overheadMode === 'free' && !freeFrame) {
@@ -481,6 +483,10 @@
       if (pointScale > 0.0) {
         float edge = 1.0 - smoothstep(.10, .49, distance(gl_PointCoord, vec2(.5)));
         gl_FragColor = vec4(mix(vec3(.88,.87,.80), mist, night * .52), edge * emission);
+        return;
+      }
+      if (emission < -1.5) {
+        gl_FragColor = vec4(shade * light, clamp(-emission - 2.0, 0.0, 1.0));
         return;
       }
       vec3 lamp = vec3(1.0, .76, .41);
@@ -615,15 +621,42 @@
       gl.disable(gl.BLEND);
       gl.uniform1f(uniforms.pointScale, 0);
     }
+    let cabin = null;
+    let cabinAspect = 0;
+    const steamBuffer = buffer([],gl.DYNAMIC_DRAW);
+    function drawTransparent(mesh) {
+      gl.enable(gl.BLEND);
+      gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+      draw(mesh);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+    }
+    function drawCabin(aspect, sky, seconds) {
+      if (cabinAspect !== aspect) {
+        if (cabin) for (const mesh of [cabin.sill,cabin.objects,cabin.shadows,cabin.glass]) gl.deleteBuffer(mesh.handle);
+        const scene = CabinScene.create(aspect);
+        cabin = { ...scene, sill:buffer(scene.sill),objects:buffer(scene.objects),shadows:buffer(scene.shadows),glass:buffer(scene.glass) };
+        cabinAspect = aspect;
+      }
+      gl.clear(gl.DEPTH_BUFFER_BIT);
+      gl.uniformMatrix4fv(uniforms.projection,false,projection(cabin.fov,aspect));
+      gl.uniformMatrix4fv(uniforms.camera,false,viewMatrix(cabin.eye,cabin.target));
+      gl.uniform3fv(uniforms.light,sky.light.map((value,i) => W.mix([.95,.89,.78][i],value,.28)));
+      gl.uniform1f(uniforms.fogStart,1000);
+      drawTransparent(cabin.glass);
+      draw(cabin.sill);
+      drawTransparent(cabin.shadows);
+      draw(cabin.objects);
+      const steam = new Float32Array(CabinScene.steam(reducedMotion.matches ? 0 : seconds,cabin.steamOrigin));
+      gl.bindBuffer(gl.ARRAY_BUFFER,steamBuffer.handle);
+      gl.bufferData(gl.ARRAY_BUFFER,steam,gl.DYNAMIC_DRAW);
+      steamBuffer.count = steam.length / 10;
+      drawTransparent(steamBuffer);
+    }
     let lastSky = '';
-    let lastCabinLight = '';
     return function render(minute, distance, cam, aspect, seconds) {
       const sky = lighting(minute);
-      const cabinLight = (.69 + .31 * (1 - sky.night)).toFixed(3);
-      if (lastCabinLight !== cabinLight) {
-        root.style.setProperty('--cabin-brightness', cabinLight);
-        lastCabinLight = cabinLight;
-      }
       const rgb = values => values.map(Math.round).join(',');
       const backdrop = 'linear-gradient(rgb(' + rgb(sky.top) + '),rgb(' + rgb(sky.horizon) + ') 69%)';
       if (lastSky !== backdrop) {
@@ -647,7 +680,7 @@
           draw(i ? coach : engine, W.position(d), W.heading(d));
         }
         drawVapor(minute, seconds, cam.fov);
-      }
+      } else drawCabin(aspect,sky,seconds);
     };
   }
 

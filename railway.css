@@ -19,52 +19,18 @@ h1{font:600 clamp(19px,2.4vw,31px)/1.14 "Songti SC","SimSun",serif;letter-spacin
 .chapter{position:absolute;right:clamp(18px,4vw,64px);top:clamp(19px,5vh,54px);display:grid;gap:4px;text-align:right;text-shadow:0 2px 12px #101410}
 .chapter span{color:#efdcac;font:11px/1.2 Georgia,serif;letter-spacing:.18em}
 .chapter strong{font:600 16px/1.45 "Songti SC","SimSun",serif;letter-spacing:.13em}
-.controls{position:absolute;bottom:max(18px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;padding:5px;border:1px solid var(--line);background:#19231eed;border-radius:15px;box-shadow:0 8px 32px #09110e67;max-width:calc(100% - 24px)}
-.views,.actions{display:flex;align-items:center;gap:3px;white-space:nowrap}
-.actions{border-left:1px solid var(--line);padding-left:7px}
-.controls button{display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;min-width:44px;border-radius:10px;padding:0 11px;font-size:13px;transition:background .2s}
+.controls{position:absolute;left:var(--dock-left);bottom:calc(var(--dock-bottom) + 66px);z-index:2;width:54px;padding:4px;border:1px solid var(--line);background:#19231eed;border-radius:14px;box-shadow:0 8px 32px #09110e67}
+.views{display:flex;flex-direction:column;gap:3px}
+.controls button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:52px;min-width:44px;width:44px;border-radius:10px;padding:4px;font-size:12px;transition:background .2s}
 .controls button[aria-pressed="true"],.controls button[aria-expanded="true"]{background:#d9bb7840;color:#fff1cc}
 .controls svg{width:17px;height:17px}
-.controls .icon{padding:0}
 .carriage{display:none;pointer-events:none;background:linear-gradient(0deg,#1a100cef,#302019 3%,#5d3a27 10%,transparent 12%,transparent 90%,#51301b 92%,#1d130c 100%)}
 .carriage div{position:absolute;inset:8% 4% 10%;border:10px solid #432b1e;border-radius:clamp(32px,6vw,92px);box-shadow:0 0 0 10px #2e1d14,0 0 0 100vmax #291b14,inset 0 0 0 3px #b08b59,inset 0 10px 35px #271c1b94}
-.carriage div::before{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(132deg,transparent 19%,#f8e9ca15 19.5%,#f8e9ca05 31%,transparent 31.5%,transparent 78%,#f8e9ca0d 79%,transparent 87%)}
 .is-cabin .carriage{display:block}
 .is-cabin .masthead,.is-cabin .chapter{z-index:1}
-.cabin-details{display:none;position:absolute;inset:0;z-index:1;pointer-events:none;--objects-bottom:calc(9% + 8px);filter:brightness(var(--cabin-brightness,1))}
-.is-cabin .cabin-details{display:block}
-.window-sill{position:absolute;left:4.1%;right:4.1%;bottom:7.2%;height:max(42px,7.2%);border-radius:6px 6px 13px 13px;border-top:2px solid #b18a59;box-shadow:0 -4px 14px #23170c55,0 9px 10px #120d0bd1,inset 0 2px 2px #e3ba7e66,inset 0 -7px 5px #24180f99;background:repeating-linear-gradient(1.2deg,transparent 0 7px,#28190c12 8px,transparent 9px 15px),linear-gradient(177deg,#977344,#a17b4c 20%,#75502e 66%,#4e3220)}
-.bellflowers{position:absolute;left:5.6%;bottom:var(--objects-bottom);width:min(24vw,34vh,280px);height:auto;filter:drop-shadow(4px 9px 4px #1e160f55)}
-.reading-corner{position:absolute;right:5.4%;bottom:var(--objects-bottom);width:min(46vw,76vh,620px);aspect-ratio:3/2}
-.reading-corner>img{display:block;width:100%;height:auto;filter:drop-shadow(1px 7px 3px #24180c66)}
-.tea-steam{position:absolute;left:76.7%;top:18%;width:13.5%;height:43%;overflow:visible}
-.tea-steam .steam-wisp{fill:none;stroke:url(#steam-fade);stroke-width:2.4;stroke-linecap:round;filter:blur(.45px);transform-origin:50% 100%;opacity:0;animation:tea-aroma 7.6s ease-in-out infinite}
-.tea-steam .steam-wisp:nth-of-type(2){animation-duration:8.8s;animation-delay:-3.4s;stroke-width:3.2}
-.tea-steam .steam-wisp:nth-of-type(3){animation-duration:9.4s;animation-delay:-5.6s;stroke-width:1.7}
-.is-paused .steam-wisp{animation-play-state:paused}
-.controls{z-index:2}
 .is-cabin .ticket{top:max(116px,calc(env(safe-area-inset-top) + 108px));bottom:auto;width:min(260px,calc(100% - 36px));background:#28291ee8;border-color:#bfa36b70}
-@keyframes tea-aroma{
-  0%{opacity:0;transform:translate(0,8px) scale(.94,.94)}
-  24%{opacity:.61}
-  62%{opacity:.31;transform:translate(-3px,-4px) scale(1.02,1.04)}
-  100%{opacity:0;transform:translate(5px,-17px) scale(1.12,1.13)}
-}
-@media(max-width:520px){
-  .cabin-details{--objects-bottom:calc(10% + 7px)}
-  .bellflowers{left:1.7%;width:min(42vw,27vh)}
-  .reading-corner{right:1.5%;width:72vw}
-  .window-sill{left:3%;right:3%;bottom:7.5%;height:7.3%}
-  .is-cabin .ticket{top:max(108px,calc(env(safe-area-inset-top) + 88px));width:226px}
-}
-@media(max-height:475px){
-  .cabin-details{--objects-bottom:calc(9% + 30px)}
-  .window-sill{bottom:calc(7.2% + 22px)}
-  .bellflowers{width:min(23vw,34vh)}
-  .reading-corner{width:min(38vw,77vh)}
-  .is-cabin .ticket{top:max(74px,calc(env(safe-area-inset-top) + 64px));width:237px}
-}
-@media(prefers-reduced-motion:reduce){.tea-steam .steam-wisp{animation:none;opacity:.28}}
+@media(max-width:520px){.is-cabin .ticket{top:max(108px,calc(env(safe-area-inset-top) + 88px));width:226px}}
+@media(max-height:475px){.is-cabin .ticket{top:max(74px,calc(env(safe-area-inset-top) + 64px));width:237px}}
 .ticket,.feature-menu,.menu-toggle{position:absolute;border:1px solid var(--line);background:#202720f4;box-shadow:0 7px 24px #12130f54}
 .ticket{right:clamp(18px,5.2vw,92px);bottom:clamp(90px,13vh,145px);border-radius:9px;width:min(283px,calc(100% - 36px));z-index:2}
 .ticket-heading{width:100%;display:flex;justify-content:space-between;align-items:center;gap:16px;text-align:left;padding:12px 14px;border-radius:8px}
@@ -110,15 +76,15 @@ h1{font:600 clamp(19px,2.4vw,31px)/1.14 "Songti SC","SimSun",serif;letter-spacin
 .stops button{flex:1;min-height:44px;padding:5px;border-radius:6px;border:1px solid var(--line);font-size:12px;white-space:nowrap}
 .failure{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(390px,90%);padding:16px;background:var(--panel);border-radius:10px;text-align:center;line-height:1.6}
 @media(max-width:690px){.ticket{bottom:max(86px,calc(env(safe-area-inset-bottom) + 64px));right:12px}.feature-menu{bottom:max(169px,calc(env(safe-area-inset-bottom) + 145px));max-height:calc(100dvh - 192px)}}
-@media(max-width:520px){.carriage div{inset:7% 3% 10%;border-width:6px}.controls{left:auto;right:12px;transform:none}.controls button{padding:0 9px}.chapter strong{font-size:14px}}
-@media(max-height:475px){.masthead,.chapter{top:12px}.ticket{bottom:77px}.controls,.menu-toggle{bottom:9px}.feature-menu{bottom:74px;max-height:calc(100dvh - 92px)}.ticket-heading{padding:7px 12px}}
+@media(max-width:520px){.carriage div{inset:7% 3% 10%;border-width:6px}.chapter strong{font-size:14px}}
+@media(max-height:475px){.masthead,.chapter{top:12px}.ticket{bottom:77px}.menu-toggle{bottom:9px}.feature-menu{bottom:74px;max-height:calc(100dvh - 92px)}.ticket-heading{padding:7px 12px}}
 @media(max-width:690px) and (max-height:475px){.feature-menu{bottom:141px;max-height:calc(100dvh - 156px)}}
 @media(prefers-reduced-motion:reduce){button{transition:none!important}}
 @supports(padding:env(safe-area-inset-left)){
   .masthead{left:max(clamp(18px,4vw,64px),calc(env(safe-area-inset-left) + 14px));top:max(clamp(16px,4.5vh,52px),calc(env(safe-area-inset-top) + 10px))}
   .chapter{right:max(clamp(18px,4vw,64px),calc(env(safe-area-inset-right) + 14px));top:max(clamp(19px,5vh,54px),calc(env(safe-area-inset-top) + 10px))}
   .menu-toggle,.feature-menu{left:max(clamp(12px,4vw,64px),calc(env(safe-area-inset-left) + 12px))}
-  .menu-toggle,.controls{bottom:max(18px,calc(env(safe-area-inset-bottom) + 10px))}
+  .menu-toggle{bottom:var(--dock-bottom)}
   .feature-menu{bottom:max(84px,calc(env(safe-area-inset-bottom) + 76px));max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 108px)}
   .ticket{right:max(clamp(18px,5.2vw,92px),calc(env(safe-area-inset-right) + 12px))}
 }
@@ -126,4 +92,12 @@ h1{font:600 clamp(19px,2.4vw,31px)/1.14 "Songti SC","SimSun",serif;letter-spacin
   .ticket{right:max(12px,calc(env(safe-area-inset-right) + 12px));bottom:max(86px,calc(env(safe-area-inset-bottom) + 76px))}
   .feature-menu{bottom:max(169px,calc(env(safe-area-inset-bottom) + 159px));max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 192px)}
 }
-@media(max-width:520px){.controls{right:max(12px,calc(env(safe-area-inset-right) + 12px))}}
+
+:root{--dock-left:max(clamp(12px,4vw,64px),calc(env(safe-area-inset-left) + 12px));--dock-bottom:max(18px,calc(env(safe-area-inset-bottom) + 10px))}
+.menu-toggle{bottom:var(--dock-bottom)}
+.is-menu-open .controls{visibility:hidden}
+.menu-actions{display:flex;gap:5px;padding:6px 5px 2px;border-top:1px solid var(--line)}
+.menu-actions button{display:flex;flex:1;min-height:44px;align-items:center;justify-content:center;gap:7px;padding:6px;border-radius:7px;font-size:12px}
+.menu-actions svg{width:17px;height:17px}
+.menu-actions button[aria-pressed="true"]{background:#d9bb7840;color:#fff1cc}
+@media(max-height:475px){:root{--dock-bottom:max(9px,calc(env(safe-area-inset-bottom) + 6px))}}
