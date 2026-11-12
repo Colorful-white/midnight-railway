@@ -472,9 +472,16 @@
       gl_PointSize = clamp(normal.x * pointScale / max(.1, -point.z), 1.0, 40.0);
     }`;
   const fragmentSource = `
+    #ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
     precision mediump float;
+    #endif
     uniform vec3 light, mist;
     uniform float night, fogStart, fogRange, rippleTime, aquarium;
+    uniform vec4 seaPhase;
+    uniform vec2 seaShine;
+    uniform vec3 seaAngles;
     uniform mediump float pointScale;
     varying vec3 shade;
     varying vec3 location, seaPosition;
@@ -489,7 +496,13 @@
         float alpha = clamp(-emission - 2.0, 0.0, 1.0);
         vec3 transparentColor = shade * light;
         if (alpha>.13 && alpha<.15 && abs(seaPosition.y-${W.sea.surface.toFixed(1)})<.03 && abs(seaPosition.x)<190.0 && abs(seaPosition.z)<140.0) {
-          float shine = smoothstep(.91,1.0,sin(seaPosition.x*.35+sin(seaPosition.z*.22)+rippleTime*.1));
+          float pattern = seaPosition.x*.35+sin(seaPosition.z*.22);
+          #ifdef GL_FRAGMENT_PRECISION_HIGH
+          float shimmer = sin(pattern+seaAngles.z);
+          #else
+          float shimmer = sin(pattern)*seaShine.y+cos(pattern)*seaShine.x;
+          #endif
+          float shine = smoothstep(.91,1.0,shimmer);
           transparentColor += vec3(.10,.14,.13)*shine;
           alpha += shine*.035;
         }
@@ -513,8 +526,15 @@
       }
       if (aquarium > .05 && seaPosition.y < -6.8) {
         vec2 uv = seaPosition.xz * .42;
-        float wave = sin(uv.x + sin(uv.y * 1.4) + rippleTime * .6) * sin(uv.y + sin(uv.x * 1.3) - rippleTime * .5);
-        float caustic = pow(max(0.0,1.0 - abs(wave) * 3.2),4.0);
+        float a = uv.x + sin(uv.y * 1.4);
+        float b = uv.y + sin(uv.x * 1.3);
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+        float wave = sin(a+seaAngles.x)*sin(b+seaAngles.y);
+        #else
+        float wave = (sin(a)*seaPhase.y+cos(a)*seaPhase.x) * (sin(b)*seaPhase.w+cos(b)*seaPhase.z);
+        #endif
+        float band = 1.0-smoothstep(0.0,.20,abs(wave));
+        float caustic = band*band;
         color += vec3(.13,.17,.12) * caustic * aquarium;
       }
       float air = smoothstep(fogStart, fogStart + fogRange, depth) * .72;
@@ -538,7 +558,7 @@
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
     gl.useProgram(program);
-    const uniforms = Object.fromEntries(['projection','camera','offset','sun','heading','modelScale','light','mist','night','fogStart','fogRange','aquarium','rippleTime','pointScale']
+    const uniforms = Object.fromEntries(['projection','camera','offset','sun','heading','modelScale','light','mist','night','fogStart','fogRange','aquarium','rippleTime','seaPhase','seaShine','seaAngles','pointScale']
       .map(name => [name, gl.getUniformLocation(program,name)]));
     const attributes = ['position','normal','color','glow'].map(name => gl.getAttribLocation(program,name));
     for (const location of attributes) gl.enableVertexAttribArray(location);
@@ -744,7 +764,14 @@
       gl.uniform1f(uniforms.fogStart, underwater>.1 ? 12 : view === 'aerial' ? 86 : 25);
       gl.uniform1f(uniforms.fogRange,W.mix(220,60,underwater));
       gl.uniform1f(uniforms.aquarium,underwater);
-      gl.uniform1f(uniforms.rippleTime, minute * .47+seaAmount*seconds*.25);
+      gl.uniform1f(uniforms.rippleTime, minute * .47);
+      // Bounded angles on highp GPUs; unit rotors on mediump GPUs avoid rounded, frozen time.
+      const seaSeconds=reducedMotion.matches ? 0 : seconds;
+      const phaseA=seaSeconds*.15,phaseB=1.7-seaSeconds*.125,shinePhase=seaSeconds*.025-.2;
+      gl.uniform4f(uniforms.seaPhase,Math.sin(phaseA),Math.cos(phaseA),Math.sin(phaseB),Math.cos(phaseB));
+      gl.uniform2f(uniforms.seaShine,Math.sin(shinePhase),Math.cos(shinePhase));
+      const angle=p=>W.wrap(p+Math.PI,Math.PI*2)-Math.PI;
+      gl.uniform3f(uniforms.seaAngles,angle(phaseA),angle(phaseB),angle(shinePhase));
       for (const mesh of localScenery(cam.target)) draw(mesh);
       if (nearSea) {
         prepareSea();
