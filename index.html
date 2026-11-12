@@ -23,6 +23,25 @@
     <canvas id="world" aria-label="随本地时间行驶的微缩铁路"></canvas>
     <div class="vignette" aria-hidden="true"></div>
     <div class="carriage" aria-hidden="true"><div></div></div>
+    <div class="cabin-details" aria-hidden="true">
+      <div class="window-sill"></div>
+      <img class="bellflowers" src="assets/cabin/bellflowers.png" width="1254" height="1254" alt="" draggable="false">
+      <div class="reading-corner">
+        <img src="assets/cabin/book-and-tea.png" width="1536" height="1024" alt="" draggable="false">
+        <svg class="tea-steam" viewBox="0 0 100 180" aria-hidden="true">
+          <defs>
+            <linearGradient id="steam-fade" x1="0" y1="1" x2="0" y2="0">
+              <stop stop-color="#fff1d6" stop-opacity=".14"/>
+              <stop offset=".28" stop-color="#fff5e7" stop-opacity=".66"/>
+              <stop offset="1" stop-color="#f9efe5" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path class="steam-wisp" d="M47 175C25 151 71 132 49 109S26 71 47 47 55 18 44 2"/>
+          <path class="steam-wisp" d="M58 177C81 149 39 132 58 108S77 69 57 47 47 18 62 1"/>
+          <path class="steam-wisp" d="M37 174C17 151 54 131 37 108S22 70 40 46 43 17 31 0"/>
+        </svg>
+      </div>
+    </div>
     <header class="masthead">
       <svg id="planet" viewBox="0 0 100 100" role="img" aria-labelledby="planet-title">
         <title id="planet-title">环线星球，细线是轨道，光点是列车位置</title>

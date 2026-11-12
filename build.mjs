@@ -6,7 +6,8 @@ import path from 'node:path';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const files = [
   'index.html', 'railway.css', 'railway.js', 'world.js', 'app-install.js', 'manifest.webmanifest',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
+  'assets/cabin/bellflowers.png', 'assets/cabin/book-and-tea.png'
 ];
 const hash = createHash('sha256');
 for (const file of [...files, 'sw.js']) {

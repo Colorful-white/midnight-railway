@@ -31,6 +31,40 @@ h1{font:600 clamp(19px,2.4vw,31px)/1.14 "Songti SC","SimSun",serif;letter-spacin
 .carriage div::before{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(132deg,transparent 19%,#f8e9ca15 19.5%,#f8e9ca05 31%,transparent 31.5%,transparent 78%,#f8e9ca0d 79%,transparent 87%)}
 .is-cabin .carriage{display:block}
 .is-cabin .masthead,.is-cabin .chapter{z-index:1}
+.cabin-details{display:none;position:absolute;inset:0;z-index:1;pointer-events:none;--objects-bottom:calc(9% + 8px);filter:brightness(var(--cabin-brightness,1))}
+.is-cabin .cabin-details{display:block}
+.window-sill{position:absolute;left:4.1%;right:4.1%;bottom:7.2%;height:max(42px,7.2%);border-radius:6px 6px 13px 13px;border-top:2px solid #b18a59;box-shadow:0 -4px 14px #23170c55,0 9px 10px #120d0bd1,inset 0 2px 2px #e3ba7e66,inset 0 -7px 5px #24180f99;background:repeating-linear-gradient(1.2deg,transparent 0 7px,#28190c12 8px,transparent 9px 15px),linear-gradient(177deg,#977344,#a17b4c 20%,#75502e 66%,#4e3220)}
+.bellflowers{position:absolute;left:5.6%;bottom:var(--objects-bottom);width:min(24vw,34vh,280px);height:auto;filter:drop-shadow(4px 9px 4px #1e160f55)}
+.reading-corner{position:absolute;right:5.4%;bottom:var(--objects-bottom);width:min(46vw,76vh,620px);aspect-ratio:3/2}
+.reading-corner>img{display:block;width:100%;height:auto;filter:drop-shadow(1px 7px 3px #24180c66)}
+.tea-steam{position:absolute;left:76.7%;top:18%;width:13.5%;height:43%;overflow:visible}
+.tea-steam .steam-wisp{fill:none;stroke:url(#steam-fade);stroke-width:2.4;stroke-linecap:round;filter:blur(.45px);transform-origin:50% 100%;opacity:0;animation:tea-aroma 7.6s ease-in-out infinite}
+.tea-steam .steam-wisp:nth-of-type(2){animation-duration:8.8s;animation-delay:-3.4s;stroke-width:3.2}
+.tea-steam .steam-wisp:nth-of-type(3){animation-duration:9.4s;animation-delay:-5.6s;stroke-width:1.7}
+.is-paused .steam-wisp{animation-play-state:paused}
+.controls{z-index:2}
+.is-cabin .ticket{top:max(116px,calc(env(safe-area-inset-top) + 108px));bottom:auto;width:min(260px,calc(100% - 36px));background:#28291ee8;border-color:#bfa36b70}
+@keyframes tea-aroma{
+  0%{opacity:0;transform:translate(0,8px) scale(.94,.94)}
+  24%{opacity:.61}
+  62%{opacity:.31;transform:translate(-3px,-4px) scale(1.02,1.04)}
+  100%{opacity:0;transform:translate(5px,-17px) scale(1.12,1.13)}
+}
+@media(max-width:520px){
+  .cabin-details{--objects-bottom:calc(10% + 7px)}
+  .bellflowers{left:1.7%;width:min(42vw,27vh)}
+  .reading-corner{right:1.5%;width:72vw}
+  .window-sill{left:3%;right:3%;bottom:7.5%;height:7.3%}
+  .is-cabin .ticket{top:max(108px,calc(env(safe-area-inset-top) + 88px));width:226px}
+}
+@media(max-height:475px){
+  .cabin-details{--objects-bottom:calc(9% + 30px)}
+  .window-sill{bottom:calc(7.2% + 22px)}
+  .bellflowers{width:min(23vw,34vh)}
+  .reading-corner{width:min(38vw,77vh)}
+  .is-cabin .ticket{top:max(74px,calc(env(safe-area-inset-top) + 64px));width:237px}
+}
+@media(prefers-reduced-motion:reduce){.tea-steam .steam-wisp{animation:none;opacity:.28}}
 .ticket,.feature-menu,.menu-toggle{position:absolute;border:1px solid var(--line);background:#202720f4;box-shadow:0 7px 24px #12130f54}
 .ticket{right:clamp(18px,5.2vw,92px);bottom:clamp(90px,13vh,145px);border-radius:9px;width:min(283px,calc(100% - 36px));z-index:2}
 .ticket-heading{width:100%;display:flex;justify-content:space-between;align-items:center;gap:16px;text-align:left;padding:12px 14px;border-radius:8px}

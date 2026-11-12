@@ -3,7 +3,8 @@ const CACHE_NAME = CACHE_PREFIX + '__ASSET_VERSION__';
 const APP_FILES = [
   './', './index.html', './railway.css', './railway.js', './world.js', './app-install.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png',
-  './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'
+  './icons/icon-maskable-512.png', './icons/apple-touch-icon.png',
+  './assets/cabin/bellflowers.png', './assets/cabin/book-and-tea.png'
 ];
 const APP_URLS = new Set(APP_FILES.map(file => new URL(file, self.registration.scope).href));
 

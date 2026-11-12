@@ -312,6 +312,7 @@
       experience.started = now;
     }
     paused = next;
+    root.classList.toggle('is-paused', paused);
     if (paused) frozenMinute = localMinute();
     freeze.setAttribute('aria-pressed', String(paused));
     freeze.setAttribute('aria-label', paused ? '继续播放' : '暂停画面');
@@ -615,8 +616,14 @@
       gl.uniform1f(uniforms.pointScale, 0);
     }
     let lastSky = '';
+    let lastCabinLight = '';
     return function render(minute, distance, cam, aspect, seconds) {
       const sky = lighting(minute);
+      const cabinLight = (.69 + .31 * (1 - sky.night)).toFixed(3);
+      if (lastCabinLight !== cabinLight) {
+        root.style.setProperty('--cabin-brightness', cabinLight);
+        lastCabinLight = cabinLight;
+      }
       const rgb = values => values.map(Math.round).join(',');
       const backdrop = 'linear-gradient(rgb(' + rgb(sky.top) + '),rgb(' + rgb(sky.horizon) + ') 69%)';
       if (lastSky !== backdrop) {
