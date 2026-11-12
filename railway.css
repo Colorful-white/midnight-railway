@@ -6,7 +6,7 @@ body{margin:0;overflow:hidden}
 .welcome.is-leaving{opacity:0}
 .welcome-content{position:relative;text-align:center;width:min(420px,100%);padding-bottom:28px}
 .welcome-planet{width:clamp(190px,36vh,300px);height:auto;margin:0 auto 12px;filter:drop-shadow(0 0 28px #b4c78f0a)}
-.welcome h2{font:400 clamp(24px,6vw,34px)/1.6 "Songti SC","STSong","SimSun",serif;letter-spacing:.16em;margin:0 0 30px;padding-left:.16em;color:#f5e8c7;text-shadow:0 2px 16px #e5d09d12}
+.welcome h2{font:400 clamp(21px,5.5vw,30px)/1.6 "Songti SC","STSong","SimSun",serif;letter-spacing:.16em;margin:0 0 30px;padding-left:.16em;color:#f5e8c7;text-shadow:0 2px 16px #e5d09d12}
 .welcome-progress{width:min(224px,75%);height:3px;background:#d9c79823;border-radius:3px;margin:auto;overflow:hidden}
 .welcome-progress span{display:block;width:100%;height:100%;border-radius:inherit;transform:scaleX(0);transform-origin:left;background:linear-gradient(90deg,#9d9f72,#f1d6a0);transition:transform .55s ease;box-shadow:0 0 8px #edce8d66}
 .welcome-status{font-size:12px;line-height:1.7;color:#c4cbb8;margin:16px 0 0}
