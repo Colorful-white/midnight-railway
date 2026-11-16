@@ -3,6 +3,8 @@ const MintSea = (() => {
   const W = RailwayWorld, S = W.sea, TAU = Math.PI*2;
   const rgb = (hex,k=1) => [16,8,0].map(shift=>((hex>>shift)&255)/255*k);
   const palettes = [0xffe6a3,0xf3bac7,0xb8dfca,0xaacfe3,0xc9b7e1];
+  // Butter yellow, peach pink, mint, sky blue, taro, milky white and champagne.
+  const fishPalette = [...palettes,0xfff7e9,0xebd8b1];
   const routeStart = W.stops[3].distance;
   const routeEnd = W.distanceAt(W.stops[3].minute+W.stops[3].duration);
   function influence([x,,z]) {
@@ -143,7 +145,7 @@ const MintSea = (() => {
     }
     const bubble=new W.Mesh();ellipsoid(bubble,[0,0,0],[1,1,1],rgb(0xe1f6ee),-2.18,5,8);
     return {reef:reef.data,frames:frames.data,glass:glass.data,water:water.data,light:light.data,
-      fish:palettes.map(fishModel),jelly:jelly.data,bubble:bubble.data};
+      fish:fishPalette.map(fishModel),jelly:jelly.data,bubble:bubble.data};
   }
   const schools=Array.from({length:9},(_,i)=>{
     const d=routeStart+(routeEnd-routeStart)*i/9;
@@ -151,15 +153,16 @@ const MintSea = (() => {
   });
   function fish(seconds) {
     const result=[];
-    for(const [index,{center,forward,kind}] of schools.entries())for(let i=0;i<10;i++) {
-      const member=i%5,layer=Math.floor(i/5);
-      const a=seconds*.072+index*.93+member*.31+layer*.65;
+    const perLayer=fishPalette.length;
+    for(const [index,{center,forward,kind}] of schools.entries())for(let i=0;i<perLayer*2;i++) {
+      const member=i%perLayer,layer=Math.floor(i/perLayer);
+      const a=seconds*.072+index*.93+member*.27+layer*.65;
       const side=[-forward[2],0,forward[0]];
       const h=W.unit(W.add(W.mul(forward,-Math.sin(a)*7),W.mul(side,Math.cos(a)*4.5)));
-      const position=W.add(center,W.add(W.mul(forward,Math.cos(a)*7+(member-2)*2.2-layer*7),W.mul(side,Math.sin(a)*4.5+layer*4)));
+      const position=W.add(center,W.add(W.mul(forward,Math.cos(a)*7+(member-(perLayer-1)/2)*2.1-layer*8),W.mul(side,Math.sin(a)*4.5+layer*5)));
       position[1]+=Math.sin(seconds*.32+member*1.8+layer)*.70+layer*.65;
       const size=.67+(member%3)*.13;
-      result.push({kind:layer ? (kind+2)%palettes.length : kind,position,heading:h,size,tail:Math.sin(seconds*3.5+i*1.2+index)*.29});
+      result.push({kind:(kind+member+layer*3)%perLayer,position,heading:h,size,tail:Math.sin(seconds*3.5+i*1.2+index)*.29});
     }
     return result;
   }
