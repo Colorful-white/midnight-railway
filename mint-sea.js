@@ -151,15 +151,25 @@ const MintSea = (() => {
     const d=routeStart+(routeEnd-routeStart)*i/9;
     return {center:trackPoint(d,14+(i%3)*2,1.7),forward:W.heading(d),kind:[0,1,2,4,3,1,0,4,2][i]};
   });
+  // A single, looser layer farther from the tunnel fills the gaps between near schools.
+  const distantSchools = [
+    {progress:.397, offset:33, lift:2.6, kind:3},
+    {progress:.496, offset:25, lift:4.6, kind:0},
+    {progress:.608, offset:35, lift:2.6, kind:4}
+  ];
+  for (const {progress,offset,lift,kind} of distantSchools) {
+    const distance = W.mix(routeStart,routeEnd,progress);
+    schools.push({center:trackPoint(distance,offset,lift),forward:W.heading(distance),kind,layers:1,spacing:3.1});
+  }
   function fish(seconds) {
     const result=[];
     const perLayer=fishPalette.length;
-    for(const [index,{center,forward,kind}] of schools.entries())for(let i=0;i<perLayer*2;i++) {
+    for(const [index,{center,forward,kind,layers=2,spacing=2.1}] of schools.entries())for(let i=0;i<perLayer*layers;i++) {
       const member=i%perLayer,layer=Math.floor(i/perLayer);
       const a=seconds*.072+index*.93+member*.27+layer*.65;
       const side=[-forward[2],0,forward[0]];
       const h=W.unit(W.add(W.mul(forward,-Math.sin(a)*7),W.mul(side,Math.cos(a)*4.5)));
-      const position=W.add(center,W.add(W.mul(forward,Math.cos(a)*7+(member-(perLayer-1)/2)*2.1-layer*8),W.mul(side,Math.sin(a)*4.5+layer*5)));
+      const position=W.add(center,W.add(W.mul(forward,Math.cos(a)*7+(member-(perLayer-1)/2)*spacing-layer*8),W.mul(side,Math.sin(a)*4.5+layer*5)));
       position[1]+=Math.sin(seconds*.32+member*1.8+layer)*.70+layer*.65;
       const size=.67+(member%3)*.13;
       result.push({kind:(kind+member+layer*3)%perLayer,position,heading:h,size,tail:Math.sin(seconds*3.5+i*1.2+index)*.29});
