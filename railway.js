@@ -1,5 +1,6 @@
 (() => {
   const W = RailwayWorld;
+  const Seasons = RailwaySeasons;
   const byId = id => document.getElementById(id);
   const root = byId('journey');
   const canvas = byId('world');
@@ -29,7 +30,8 @@
   let drag = null;
   let paused = reducedMotion.matches;
   let experience = null;
-  let frozenMinute = localMinute();
+  let frozenDate = new Date();
+  let frozenMinute = localMinute(frozenDate);
   let gl;
 
   function savedCameraMode() {
@@ -68,12 +70,11 @@
   }
   const showPlanetPosition = planetMap();
 
-  function localMinute() {
-    const now = new Date();
+  function localMinute(now = new Date()) {
     return now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60 + now.getMilliseconds() / 60000;
   }
-  function activeMinute(now = performance.now()) {
-    if (!experience) return paused ? frozenMinute : localMinute();
+  function activeMinute(now = performance.now(), date) {
+    if (!experience) return paused ? frozenMinute : localMinute(date);
     const elapsed = paused ? 0 : Math.max(0, now - experience.started) / 60000;
     return W.wrap(experience.minute + elapsed, W.DAY);
   }
@@ -90,7 +91,7 @@
   }
 
   const ui = {
-    chapterIndex: byId('chapter-index'), chapterName: byId('chapter-name'),
+    chapterIndex: byId('chapter-index'), chapterSeason: byId('chapter-season'), chapterName: byId('chapter-name'),
     label: byId('ticket-label'), name: byId('ticket-name'), time: byId('ticket-time'),
     countdown: byId('ticket-countdown'), experienceClock: byId('experience-clock')
   };
@@ -99,13 +100,14 @@
     if (!scrub.matches(':active')) scrub.value = Math.floor(minute);
   }
   let lastUi = '';
-  function updateUi(minute, chapter) {
+  function updateUi(minute, chapter, season) {
     const current = W.stops.find(stop => W.wrap(minute - stop.minute, W.DAY) < stop.duration);
     const next = current || W.stops.find(stop => stop.minute > minute) || W.stops[0];
-    const key = [Math.floor(minute), chapter.index, next.minute, Boolean(current)].join();
+    const key = [Math.floor(minute), chapter.index, season.id, next.minute, Boolean(current)].join();
     if (lastUi === key) return;
     lastUi = key;
     ui.chapterIndex.textContent = String(chapter.index + 1).padStart(2, '0') + ' / ' + String(W.chapters.length).padStart(2, '0');
+    ui.chapterSeason.textContent = season.name;
     ui.chapterName.textContent = chapter.name;
     ui.label.textContent = current ? '正在经过' : '下一站';
     ui.name.textContent = next.name;
@@ -298,7 +300,8 @@
   }
   returnLive.addEventListener('click', () => {
     experience = null;
-    frozenMinute = localMinute();
+    frozenDate = new Date();
+    frozenMinute = localMinute(frozenDate);
     freeFrame = null;
     showExperienceState();
     syncExperienceClock(frozenMinute);
@@ -313,7 +316,10 @@
       experience.started = now;
     }
     paused = next;
-    if (paused) frozenMinute = localMinute();
+    if (paused) {
+      frozenDate = new Date();
+      frozenMinute = localMinute(frozenDate);
+    }
     freeze.setAttribute('aria-pressed', String(paused));
     freeze.setAttribute('aria-label', paused ? '继续播放' : '暂停画面');
     freeze.title = paused ? '继续播放' : '暂停画面';
@@ -452,6 +458,8 @@
     uniform vec3 offset, sun;
     uniform vec2 heading;
     uniform float modelScale;
+    uniform vec4 seasonGround, seasonGrass, seasonTrees;
+    uniform float snowCover;
     uniform mediump float pointScale;
     varying vec3 shade;
     varying vec3 location, seaPosition;
@@ -463,7 +471,19 @@
       vec3 world = rotate(position * modelScale) + offset;
       vec4 point = camera * vec4(world, 1.0);
       float diffuse = max(dot(rotate(normal), sun), 0.0);
-      shade = color * (0.64 + 0.49 * diffuse);
+      vec3 materialColor = color;
+      if (glow <= ${W.seasonalMaterial.ground.toFixed(2)} && glow > -.5) {
+        float retention = clamp((${W.seasonalMaterial.ground.toFixed(2)} - glow) / .18,0.0,1.0);
+        float coverage = mix(1.0,retention,snowCover);
+        vec3 seasonalColor = seasonGround.rgb * (.65 + .35 * dot(color,vec3(.3,.55,.15)));
+        if (snowCover > .5) seasonalColor = seasonGround.rgb;
+        materialColor = mix(color,seasonalColor,seasonGround.a*coverage);
+      } else if (abs(glow - (${W.seasonalMaterial.grass.toFixed(2)})) < .025) {
+        materialColor = mix(color,seasonGrass.rgb,seasonGrass.a);
+      } else if (abs(glow - (${W.seasonalMaterial.evergreen.toFixed(2)})) < .025) {
+        materialColor = mix(color,seasonTrees.rgb,seasonTrees.a);
+      }
+      shade = materialColor * (0.64 + 0.49 * diffuse);
       emission = glow;
       depth = length(point.xyz);
       location = world;
@@ -477,7 +497,7 @@
     #else
     precision mediump float;
     #endif
-    uniform vec3 light, mist;
+    uniform vec3 light, mist, pointTint;
     uniform float night, fogStart, fogRange, rippleTime, aquarium;
     uniform vec4 seaPhase;
     uniform vec2 seaShine;
@@ -489,7 +509,7 @@
     void main() {
       if (pointScale > 0.0) {
         float edge = 1.0 - smoothstep(.10, .49, distance(gl_PointCoord, vec2(.5)));
-        gl_FragColor = vec4(mix(vec3(.88,.87,.80), mist, night * .52), edge * emission);
+        gl_FragColor = vec4(mix(pointTint, mist, night * .52), edge * emission);
         return;
       }
       if (emission < -1.5) {
@@ -558,7 +578,7 @@
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
     gl.useProgram(program);
-    const uniforms = Object.fromEntries(['projection','camera','offset','sun','heading','modelScale','light','mist','night','fogStart','fogRange','aquarium','rippleTime','seaPhase','seaShine','seaAngles','pointScale']
+    const uniforms = Object.fromEntries(['projection','camera','offset','sun','heading','modelScale','light','mist','night','fogStart','fogRange','aquarium','rippleTime','seaPhase','seaShine','seaAngles','pointScale','pointTint','seasonGround','seasonGrass','seasonTrees','snowCover']
       .map(name => [name, gl.getUniformLocation(program,name)]));
     const attributes = ['position','normal','color','glow'].map(name => gl.getAttribLocation(program,name));
     for (const location of attributes) gl.enableVertexAttribArray(location);
@@ -621,6 +641,9 @@
     }
     const vaporData = new Float32Array(12 * 10);
     const vapor = buffer(vaporData, gl.DYNAMIC_DRAW);
+    const snowData = new Float32Array(Seasons.flakeCount * 10);
+    const snow = buffer(snowData, gl.DYNAMIC_DRAW);
+    let springFlowers = null;
     function draw(mesh, offset = [0,0,0], heading = [1,0,0], mode = gl.TRIANGLES, scale = 1) {
       gl.uniform3fv(uniforms.offset, offset);
       gl.uniform2f(uniforms.heading, heading[0], heading[2]);
@@ -645,13 +668,17 @@
           .40 + age * .54, 0, 0, 0, 0, 0, fade * .38
         ], i * 10);
       }
-      gl.bindBuffer(gl.ARRAY_BUFFER, vapor.handle);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, vaporData);
+      drawPoints(vapor,vaporData,fov,[.88,.87,.80]);
+    }
+    function drawPoints(mesh, data, fov, tint) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.handle);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data);
       gl.uniform1f(uniforms.pointScale, canvas.height / (2 * Math.tan(fov * Math.PI / 360)));
+      gl.uniform3fv(uniforms.pointTint,tint);
       gl.enable(gl.BLEND);
       gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       gl.depthMask(false);
-      draw(vapor, undefined, undefined, gl.POINTS);
+      draw(mesh, undefined, undefined, gl.POINTS);
       gl.depthMask(true);
       gl.disable(gl.BLEND);
       gl.uniform1f(uniforms.pointScale, 0);
@@ -738,13 +765,18 @@
       drawTransparent(sea.water);
     }
     let lastSky = '';
-    return function render(minute, distance, cam, aspect, seconds) {
+    let lastSeason = null;
+    return function render(minute, distance, cam, aspect, seconds, season) {
       const ordinarySky = lighting(minute);
       const seaAmount = MintSea.influence(cam.target);
       const underwater = view==='cabin' ? seaAmount*W.smooth(W.clamp((W.sea.surface-cam.eye[1])/3.2,0,1)) : 0;
-      const sky = { top:blend(ordinarySky.top,[49,119,142],underwater),
-        horizon:blend(ordinarySky.horizon,[124,188,186],underwater),
-        light:blend(ordinarySky.light,[.94,1.02,.99],seaAmount*.94),
+      const horizonShift = 1-seaAmount*.82;
+      const springMist = season.id==='spring' ? Seasons.springMist(minute,cam.eye[1])*(1-seaAmount) : 0;
+      const afterglow = season.id==='summer' ? Seasons.summerAfterglow(minute)*horizonShift : 0;
+      const landHorizon = W.add(W.add(ordinarySky.horizon,W.mul(season.horizon,horizonShift)),W.mul([12,5,-13],afterglow));
+      const sky = { top:blend(W.add(ordinarySky.top,W.mul(season.top,horizonShift)),[49,119,142],underwater),
+        horizon:blend(landHorizon,[124,188,186],underwater),
+        light:blend(W.add(ordinarySky.light,W.mul(season.light,horizonShift)),[.94,1.02,.99],seaAmount*.94),
         night:W.mix(ordinarySky.night,.24,seaAmount) };
       const nearSea = Math.hypot(cam.target[0]-W.sea.x,cam.target[2]-W.sea.z)<430;
       const rgb = values => values.map(Math.round).join(',');
@@ -761,9 +793,17 @@
       gl.uniform3fv(uniforms.light, sky.light);
       gl.uniform3fv(uniforms.mist, sky.horizon.map(v => v / 255));
       gl.uniform1f(uniforms.night, sky.night);
-      gl.uniform1f(uniforms.fogStart, underwater>.1 ? 12 : view === 'aerial' ? 86 : 25);
-      gl.uniform1f(uniforms.fogRange,W.mix(220,60,underwater));
+      gl.uniform1f(uniforms.fogStart, underwater>.1 ? 12 : view === 'aerial' ? 86-springMist*26 : 25-springMist*8);
+      const airRange = season.id==='summer' ? 244 : 220-springMist*89;
+      gl.uniform1f(uniforms.fogRange,W.mix(airRange,60,underwater));
       gl.uniform1f(uniforms.aquarium,underwater);
+      if (season!==lastSeason) {
+        gl.uniform4fv(uniforms.seasonGround,season.ground);
+        gl.uniform4fv(uniforms.seasonGrass,season.grass);
+        gl.uniform4fv(uniforms.seasonTrees,season.trees);
+        gl.uniform1f(uniforms.snowCover,season.id==='winter' ? 1 : 0);
+        lastSeason = season;
+      }
       gl.uniform1f(uniforms.rippleTime, minute * .47);
       // Bounded angles on highp GPUs; unit rotors on mediump GPUs avoid rounded, frozen time.
       const seaSeconds=reducedMotion.matches ? 0 : seconds;
@@ -773,6 +813,10 @@
       const angle=p=>W.wrap(p+Math.PI,Math.PI*2)-Math.PI;
       gl.uniform3f(uniforms.seaAngles,angle(phaseA),angle(phaseB),angle(shinePhase));
       for (const mesh of localScenery(cam.target)) draw(mesh);
+      if (season.id==='spring' && Seasons.nearFlowers(cam.target)) {
+        springFlowers ||= buffer(Seasons.springFlowers());
+        draw(springFlowers);
+      }
       if (nearSea) {
         prepareSea();
         draw(sea.reef);draw(sea.frames);
@@ -786,6 +830,11 @@
         drawVapor(minute, seconds, cam.fov);
       }
       if (nearSea) drawSeaGlass(reducedMotion.matches ? 0 : seconds);
+      const flurry = season.id==='winter' && !reducedMotion.matches ? Seasons.snowStrength(minute,cam.target[0],cam.target[2]) : 0;
+      if (flurry>0) {
+        Seasons.snow(seconds,flurry,snowData);
+        drawPoints(snow,snowData,cam.fov,[.93,.96,1]);
+      }
       if (view==='cabin') drawCabin(aspect,sky,seconds);
     };
   }
@@ -802,12 +851,14 @@
       const elapsed = Math.min((now - lastFrame) / 1000, .15);
       lastFrame = now;
       if (!paused) motionSeconds += elapsed;
-      const minute = activeMinute(now);
+      const date = paused ? frozenDate : new Date();
+      const minute = activeMinute(now,date);
+      const season = Seasons.onDate(date);
       const distance = W.distanceAt(minute);
       const resolution = Math.min(devicePixelRatio || 1, 1.6);
       const width = Math.max(1, Math.round(root.clientWidth * resolution));
       const height = Math.max(1, Math.round(root.clientHeight * resolution));
-      const renderKey = [minute, width, height, view, overheadMode, isFreeView() && freeFrame?.target.join(), motionSeconds].join();
+      const renderKey = [minute, season.id, width, height, view, overheadMode, isFreeView() && freeFrame?.target.join(), motionSeconds].join();
       if (renderKey === lastRender) return;
       lastRender = renderKey;
       if (canvas.width !== width || canvas.height !== height) {
@@ -816,8 +867,8 @@
       }
       const cam = camera(distance, width / height);
       showPlanetPosition(distance);
-      updateUi(minute, cam.chapter);
-      render(minute, distance, cam, width / height, motionSeconds);
+      updateUi(minute, cam.chapter, season);
+      render(minute, distance, cam, width / height, motionSeconds, season);
       window.RailwayLaunch?.ready();
     }
     canvas.addEventListener('webglcontextlost', event => {

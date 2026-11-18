@@ -17,6 +17,7 @@
   <script defer src="launch.js"></script>
   <script defer src="app-install.js"></script>
   <script defer src="world.js" data-launch-progress="52"></script>
+  <script defer src="seasons.js"></script>
   <script defer src="mint-sea.js" data-launch-progress="65"></script>
   <script defer src="cabin.js" data-launch-progress="70"></script>
   <script defer src="railway.js" data-launch-progress="86"></script>
@@ -88,7 +89,10 @@
       </svg>
       <div><h1>零点环线</h1><span>MIDNIGHT RAILWAY</span></div>
     </header>
-    <div id="chapter" class="chapter"><span id="chapter-index"></span><strong id="chapter-name"></strong></div>
+    <div id="chapter" class="chapter">
+      <div class="chapter-meta"><span id="chapter-index"></span><span id="chapter-season" class="chapter-season"></span></div>
+      <strong id="chapter-name"></strong>
+    </div>
     <section id="ticket" class="ticket" aria-label="列车时刻表">
       <button id="ticket-toggle" class="ticket-heading" type="button" aria-expanded="false" aria-controls="departures">
         <span><small id="ticket-label">下一站</small><strong id="ticket-name"></strong></span>

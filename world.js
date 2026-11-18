@@ -30,6 +30,8 @@ const RailwayWorld = (() => {
   const tree = { x: -108, z: -32 };
   const lake = { x: 95, z: -6 };
   const sea = { x: 8910, z: 572, surface: 3.2, floor: -11.5, startNode: 0, endNode: 0 };
+  // Negative material markers above -.5 never participate in the water or alpha passes.
+  const seasonalMaterial = { evergreen: -.10, grass: -.20, ground: -.30, snow: -.48 };
   const controls = [];
   function rail(x, z, height = 0.7) {
     controls.push([x, height, z]);
@@ -213,9 +215,9 @@ const RailwayWorld = (() => {
 
   class Mesh {
     data = [];
-    triangle(a, b, c, color, light = 0) {
+    triangle(a, b, c, color, light = 0, lightB = light, lightC = light) {
       const normal = unit(cross(sub(b, a), sub(c, a)));
-      for (const p of [a, b, c]) this.data.push(...p, ...normal, ...color, light);
+      this.data.push(...a,...normal,...color,light,...b,...normal,...color,lightB,...c,...normal,...color,lightC);
     }
     quad(a, b, c, d, color, light) {
       this.triangle(a, b, c, color, light);
@@ -229,7 +231,7 @@ const RailwayWorld = (() => {
       this.quad([r,y,f], [l,y,f], [l,t,f], [r,t,f], color, glow);
       this.quad([l,y,b], [r,y,b], [r,t,b], [l,t,b], color, glow);
     }
-    cone(x, y, z, bottom, top, height, color, sides = 7, drift = 0) {
+    cone(x, y, z, bottom, top, height, color, sides = 7, drift = 0, material = 0) {
       for (let i = 0; i < sides; i++) {
         const a = TAU * i / sides;
         const b = TAU * (i + 1) / sides;
@@ -237,7 +239,7 @@ const RailwayWorld = (() => {
           [x + bottom * Math.cos(b), y, z + bottom * Math.sin(b)],
           [x + bottom * Math.cos(a), y, z + bottom * Math.sin(a)],
           [x + drift + top * Math.cos(a), y + height, z + top * Math.sin(a)],
-          [x + drift + top * Math.cos(b), y + height, z + top * Math.sin(b)], color
+          [x + drift + top * Math.cos(b), y + height, z + top * Math.sin(b)], color, material
         );
       }
     }
@@ -281,8 +283,18 @@ const RailwayWorld = (() => {
     const base = basin < .94 ? (Math.sin(x*.17+z*.08)>.3 ? 0xc9d9c8 : 0xb9d5c9)
       : basin<1.15 ? 0xe2d8bb : distance > 0.97 && distance < 1.09 ? 0x958b64 : x < -36 ? 0x56694c : 0x748061;
     const shade = 0.96 + 0.09 * Math.sin(x * .037 + z * .09) + between(0.01, 0.07);
-    mesh.triangle(a, b, c, tint(base, shade));
-    mesh.triangle(a, c, d, tint(base, shade * between(.95, 1.05)));
+    let drifts = [0,0,0,0];
+    if (basin >= 1.02 && distance >= .97) {
+      const slope = Math.hypot(b[1] - a[1], d[1] - a[1]) / step;
+      drifts = [a,b,c,d].map(([px,,pz]) => {
+        const drift = Math.sin(px*.043+pz*.058)+.54*Math.cos(px*.115-pz*.091);
+        const plain = smooth(clamp(Math.min((px-45)/65,(740-px)/120,(pz-190)/75,(695-pz)/90),0,1));
+        const snow = clamp(.60+drift*.38-slope*.65+plain*.16,.08,.98);
+        return mix(seasonalMaterial.ground,seasonalMaterial.snow,snow);
+      });
+    }
+    mesh.triangle(a, b, c, tint(base, shade), drifts[0],drifts[1],drifts[2]);
+    mesh.triangle(a, c, d, tint(base, shade * between(.95, 1.05)), drifts[0],drifts[2],drifts[3]);
   }
   for (let z = core.north; z < core.south; z += step) {
     for (let x = core.left; x < core.right; x += step) {
@@ -335,7 +347,7 @@ const RailwayWorld = (() => {
     const color = pick(palette);
     mesh.cone(x, y, z, width * .14, width * .08, h * .5, tint(0x574736), 5);
     for (let j = 0; j < 3; j++) {
-      mesh.cone(x, y + h * (.17 + j * .17), z, width * (1 - j * .20), 0, h * (.49 - j * .02), tint(color, .87 + j * .10), 6);
+      mesh.cone(x, y + h * (.17 + j * .17), z, width * (1 - j * .20), 0, h * (.49 - j * .02), tint(color, .87 + j * .10), 6, 0, seasonalMaterial.evergreen);
     }
   }
   for (let i = 0; i < 2300; i++) {
@@ -353,7 +365,7 @@ const RailwayWorld = (() => {
     const z = between(-130, 105);
     const y = terrain(x, z);
     if (nearRail(x, z, 1.8) || y < waterHeight + .15) continue;
-    scenery.cone(x, y, z, between(.18, .9), between(.02, .14), between(.15, .8), tint(pick([0x8a925e, 0xb0a571, 0x647750, 0x87946f])), 4);
+    scenery.cone(x, y, z, between(.18, .9), between(.02, .14), between(.15, .8), tint(pick([0x8a925e, 0xb0a571, 0x647750, 0x87946f])), 4, 0, seasonalMaterial.grass);
   }
 
   // The track passes through a bark arch and an open tunnel below the canopy.
@@ -538,7 +550,7 @@ const RailwayWorld = (() => {
       } else {
         const rock = z < -280 && random() > .66;
         const color = rock ? 0x909183 : pick([0x8a925e, 0xa09768, 0x647750]);
-        mesh.cone(x, terrain(x, z), z, between(.4, 2), .12, rock ? between(1.1, 3) : between(.25, .95), tint(color), 5);
+      mesh.cone(x, terrain(x, z), z, between(.4, 2), .12, rock ? between(1.1, 3) : between(.25, .95), tint(color), 5, 0, rock ? 0 : seasonalMaterial.grass);
       }
     }
     seed = savedSeed;
@@ -566,6 +578,6 @@ const RailwayWorld = (() => {
   }
 
   return { Mesh, DAY, clamp, wrap, mix, smooth, add, sub, mul, dot, cross, unit, stops, chapters, featureShots,
-    total, distanceAt, position, heading, core, sea, groundHeight:terrain, tileSize, railSections, railMesh, countryMesh, terrain: ground.data, scenery: scenery.data,
+    total, distanceAt, position, heading, core, sea, seasonalMaterial, groundHeight:terrain, nearRail, tileSize, railSections, railMesh, countryMesh, terrain: ground.data, scenery: scenery.data,
     engine: trainCar(true), coach: trainCar(false) };
 })();

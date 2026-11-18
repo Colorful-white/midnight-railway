@@ -30,7 +30,9 @@ svg{display:block;fill:none;stroke:currentColor;stroke-width:1.55;stroke-linecap
 h1{font:600 clamp(19px,2.4vw,31px)/1.14 "Songti SC","SimSun",serif;letter-spacing:.15em;margin:0 0 5px}
 .masthead span{font:9px/1 Georgia,serif;letter-spacing:.23em;color:#efe0bc;display:block}
 .chapter{position:absolute;right:clamp(18px,4vw,64px);top:clamp(19px,5vh,54px);display:grid;gap:4px;text-align:right;text-shadow:0 2px 12px #101410}
+.chapter-meta{display:flex;justify-content:flex-end;align-items:center;gap:7px;white-space:nowrap}
 .chapter span{color:#efdcac;font:11px/1.2 Georgia,serif;letter-spacing:.18em}
+.chapter .chapter-season{border-left:1px solid #efdcac60;padding-left:7px;font-family:"Songti SC","SimSun",serif;letter-spacing:.1em}
 .chapter strong{font:600 16px/1.45 "Songti SC","SimSun",serif;letter-spacing:.13em}
 .controls{position:absolute;left:var(--dock-left);bottom:calc(var(--dock-bottom) + 66px);z-index:2;width:54px;padding:4px;border:1px solid var(--line);background:#19231eed;border-radius:14px;box-shadow:0 8px 32px #09110e67}
 .views{display:flex;flex-direction:column;gap:3px}

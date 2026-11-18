@@ -11,6 +11,7 @@
 | `launch.js` | `window.RailwayLaunch`；加载里程碑、首帧完成、前台重入、失败提示 |
 | `app-install.js` | 平台安装说明、离线准备状态、检查与应用更新 |
 | `world.js` | 全局词法常量 `RailwayWorld`；闭合线路、时刻插值、地形、地物、轨道和车体网格 |
+| `seasons.js` | `RailwaySeasons`；四天轮换、季节材质和光照参数、薄雾、余晖、春花和局部飘雪 |
 | `mint-sea.js` | `MintSea`；薄荷海静态网格、鱼群、鳐鱼和场景影响范围 |
 | `cabin.js` | `CabinScene`；窗台、花、合书、茶杯及动态热气 |
 | `railway.js` | UI 行为、时间、镜头、光照、WebGL 着色器、缓冲与动画帧 |
@@ -19,13 +20,15 @@
 | `build.mjs` | Node.js 构建；白名单复制源文件并替换 SW 版本 |
 | `.github/workflows/pages.yml` | `main` 推送后构建和部署 GitHub Pages |
 
-脚本顺序：`launch.js → app-install.js → world.js → mint-sea.js → cabin.js → railway.js`。虽然安装脚本较早执行，所有 `defer` 脚本都在 DOM 解析后执行。`world.js` 必须早于两个景观/前景模块；这些模块必须早于主渲染器。
+脚本顺序：`launch.js → app-install.js → world.js → seasons.js → mint-sea.js → cabin.js → railway.js`。所有 `defer` 脚本在 DOM 解析后执行。世界数据必须早于季节、薄荷海和车窗前景，这三个模块必须早于主渲染器。
 
 没有模块打包器；`RailwayWorld`、`MintSea`、`CabinScene` 是脚本之间共享的顶层词法绑定，不应假设它们等同于 `window` 属性。
 
 ## 时间、线路与地形
 
 `railway.js` 的 `localMinute()` 使用设备的本地时分秒。`activeMinute()` 在实况、时段体验和暂停之间切换。`motionSeconds` 用于动效，与所选日内时刻分开。
+
+`RailwaySeasons.onDate()` 将本地年月日转换成日序号，从 2026-11-19 的春天开始按四天取模。实况的日期与分钟取自同一时钟采样。时段体验只改分钟，暂停冻结画面所用的日期和分钟。雪花的出现由季节、体验时刻与取景位置共同决定，飘落使用 `motionSeconds`。
 
 `world.js` 从控制点生成 Catmull–Rom 闭合轨道与里程表：
 
@@ -43,7 +46,7 @@
 
 `RailwayWorld.Mesh` 的每顶点布局为 **10 个浮点数**：位置 3、法线 3、颜色 3、发光/透明标记 1。全局着色器通过这个布局处理不透明物体、半透明网格、车灯和蒸汽粒子。
 
-当前约定包括：普通网格的发光标记非负；低于 `-1.5` 的标记进入半透明分支，透明度从 `-emission - 2` 得到。其他负值还有水面等专门语义。增加材质前阅读着色器，不能随意复用标记。
+普通网格的发光标记非负。`world.js` 的 `seasonalMaterial` 在 `(-.5,0)` 为树叶、矮草及陆地留出保留值；地面每个顶点的值带有积雪保留量。`railway.js` 通过顶点着色器切换季节材质，换季时可复用地形和轨道缓冲。低于 `-1.5` 的标记进入半透明分支，透明度从 `-emission - 2` 得到。其他负值还有水面等专门语义。
 
 `railway.js` 按需缓存周围地形、地物和轨道段；缓冲淘汰时删除 GPU 资源。薄荷海静态场景懒初始化，鱼体/尾鳍复用七种颜色的模型；鳐鱼与茶的热气复用动态数组和 GPU 存储。
 
