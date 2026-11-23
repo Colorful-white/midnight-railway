@@ -1,6 +1,7 @@
 (() => {
   const W = RailwayWorld;
   const Seasons = RailwaySeasons;
+  const Valley = DreamValley;
   const byId = id => document.getElementById(id);
   const root = byId('journey');
   const canvas = byId('world');
@@ -427,6 +428,11 @@
       target = blend(target, shot.aim, blendAmount);
       radius = W.mix(radius, shot.radius, blendAmount);
     }
+    const valleyShot = Valley.overhead(distance);
+    if (valleyShot) {
+      target = blend(target,valleyShot.target,valleyShot.strength);
+      radius = W.mix(radius,valleyShot.radius,valleyShot.strength);
+    }
     const eyeOffset = overheadOffset(radius);
     const horizontal = W.unit([.77, 0, -.61]);
     const groundForward = W.unit([.61, 0, .77]);
@@ -460,10 +466,10 @@
     uniform float modelScale;
     uniform vec4 seasonGround, seasonGrass, seasonTrees;
     uniform float snowCover;
-    uniform mediump float pointScale;
+    uniform mediump float pointScale, valleyCloud;
     varying vec3 shade;
-    varying vec3 location, seaPosition;
-    varying float depth, emission;
+    varying vec3 location, seaPosition, valleyPosition;
+    varying float depth, emission, cloudFacing;
     vec3 rotate(vec3 p) {
       return vec3(heading.x*p.x-heading.y*p.z,p.y,heading.y*p.x+heading.x*p.z);
     }
@@ -488,6 +494,12 @@
       depth = length(point.xyz);
       location = world;
       seaPosition = world - vec3(${W.sea.x.toFixed(1)},0.0,${W.sea.z.toFixed(1)});
+      valleyPosition = world - vec3(${W.dream.x.toFixed(1)},0.0,${W.dream.z.toFixed(1)});
+      cloudFacing = 1.0;
+      if (valleyCloud > 0.0) {
+        vec3 bankNormal = normalize((camera * vec4(rotate(normal),0.0)).xyz);
+        cloudFacing = abs(dot(bankNormal,normalize(point.xyz)));
+      }
       gl_Position = projection * point;
       gl_PointSize = clamp(normal.x * pointScale / max(.1, -point.z), 1.0, 40.0);
     }`;
@@ -502,10 +514,10 @@
     uniform vec4 seaPhase;
     uniform vec2 seaShine;
     uniform vec3 seaAngles;
-    uniform mediump float pointScale;
+    uniform mediump float pointScale, valleyCloud;
     varying vec3 shade;
-    varying vec3 location, seaPosition;
-    varying float depth, emission;
+    varying vec3 location, seaPosition, valleyPosition;
+    varying float depth, emission, cloudFacing;
     void main() {
       if (pointScale > 0.0) {
         float edge = 1.0 - smoothstep(.10, .49, distance(gl_PointCoord, vec2(.5)));
@@ -515,6 +527,13 @@
       if (emission < -1.5) {
         float alpha = clamp(-emission - 2.0, 0.0, 1.0);
         vec3 transparentColor = shade * light;
+        if (valleyCloud > 0.0) {
+          float folds = .78 + .22*sin(valleyPosition.x*.056 + sin(valleyPosition.z*.09)*1.16);
+          float distanceFade = 1.0-smoothstep(370.0,620.0,depth);
+          float softEdge = smoothstep(.09,.85,cloudFacing);
+          gl_FragColor = vec4(mix(shade,mist,.34), alpha*folds*distanceFade*softEdge*valleyCloud);
+          return;
+        }
         if (alpha>.13 && alpha<.15 && abs(seaPosition.y-${W.sea.surface.toFixed(1)})<.03 && abs(seaPosition.x)<190.0 && abs(seaPosition.z)<140.0) {
           float pattern = seaPosition.x*.35+sin(seaPosition.z*.22);
           #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -578,7 +597,7 @@
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
     gl.useProgram(program);
-    const uniforms = Object.fromEntries(['projection','camera','offset','sun','heading','modelScale','light','mist','night','fogStart','fogRange','aquarium','rippleTime','seaPhase','seaShine','seaAngles','pointScale','pointTint','seasonGround','seasonGrass','seasonTrees','snowCover']
+    const uniforms = Object.fromEntries(['projection','camera','offset','sun','heading','modelScale','light','mist','night','fogStart','fogRange','aquarium','rippleTime','seaPhase','seaShine','seaAngles','pointScale','pointTint','seasonGround','seasonGrass','seasonTrees','snowCover','valleyCloud']
       .map(name => [name, gl.getUniformLocation(program,name)]));
     const attributes = ['position','normal','color','glow'].map(name => gl.getAttribLocation(program,name));
     for (const location of attributes) gl.enableVertexAttribArray(location);
@@ -611,22 +630,23 @@
         cache.delete(key);
       }
     }
-    function localScenery([x,,z]) {
+    function localScenery([x,,z],lookIntoValley) {
       const size = W.tileSize;
       const column = Math.floor(x / size);
       const row = Math.floor(z / size);
       const radius = view === 'aerial' ? 2 : 3;
-      const key = [column, row, radius].join();
+      const northernRow = row-radius-(lookIntoValley ? 2 : 0);
+      const key = [column, row, radius, northernRow].join();
       if (key === visibleKey) return visible;
       visibleKey = key;
       visible = [];
       const left = (column - radius) * size;
       const right = (column + radius + 1) * size;
-      const north = (row - radius) * size;
+      const north = northernRow*size;
       const south = (row + radius + 1) * size;
       const overlaps = area => area.left <= right && area.right >= left && area.north <= south && area.south >= north;
       if (overlaps(W.core)) visible.push(ground, scenery);
-      for (let j = row - radius; j <= row + radius; j++) {
+      for (let j = northernRow; j <= row+radius; j++) {
         for (let i = column - radius; i <= column + radius; i++) {
           const tile = cachedMesh(tiles, i + ',' + j, () => W.countryMesh(i, j));
           if (tile.count) visible.push(tile);
@@ -724,6 +744,7 @@
       drawTransparent(steamBuffer);
     }
     let sea = null;
+    let dreamValley = null;
     const rayBuffer = buffer([],gl.DYNAMIC_DRAW);
     let rayCapacity = 0;
     function prepareSea() {
@@ -731,6 +752,10 @@
       const model = MintSea.create();
       sea = Object.fromEntries(['reef','frames','glass','water','light','jelly','bubble'].map(key=>[key,buffer(model[key])]));
       sea.fish = model.fish.map(fish=>({body:buffer(fish.body),tail:buffer(fish.tail)}));
+    }
+    function prepareValley() {
+      if (dreamValley) return;
+      dreamValley = Object.fromEntries(Object.entries(Valley.create()).map(([name,data]) => [name,buffer(data)]));
     }
     function drawSeaAnimals(seconds) {
       for (const fish of MintSea.fish(seconds)) {
@@ -769,12 +794,19 @@
     return function render(minute, distance, cam, aspect, seconds, season) {
       const ordinarySky = lighting(minute);
       const seaAmount = MintSea.influence(cam.target);
+      const valleyAmount = Valley.influence(cam.target);
       const underwater = view==='cabin' ? seaAmount*W.smooth(W.clamp((W.sea.surface-cam.eye[1])/3.2,0,1)) : 0;
       const horizonShift = 1-seaAmount*.82;
       const springMist = season.id==='spring' ? Seasons.springMist(minute,cam.eye[1])*(1-seaAmount) : 0;
       const afterglow = season.id==='summer' ? Seasons.summerAfterglow(minute)*horizonShift : 0;
-      const landHorizon = W.add(W.add(ordinarySky.horizon,W.mul(season.horizon,horizonShift)),W.mul([12,5,-13],afterglow));
-      const sky = { top:blend(W.add(ordinarySky.top,W.mul(season.top,horizonShift)),[49,119,142],underwater),
+      let landHorizon = W.add(W.add(ordinarySky.horizon,W.mul(season.horizon,horizonShift)),W.mul([12,5,-13],afterglow));
+      let landTop = W.add(ordinarySky.top,W.mul(season.top,horizonShift));
+      if (valleyAmount>0) {
+        const warmth = Valley.warmth(cam.target);
+        landTop = blend(landTop,blend([15,20,39],[27,26,42],warmth),valleyAmount*.82);
+        landHorizon = blend(landHorizon,blend([48,52,76],[74,62,78],warmth),valleyAmount*.82);
+      }
+      const sky = { top:blend(landTop,[49,119,142],underwater),
         horizon:blend(landHorizon,[124,188,186],underwater),
         light:blend(W.add(ordinarySky.light,W.mul(season.light,horizonShift)),[.94,1.02,.99],seaAmount*.94),
         night:W.mix(ordinarySky.night,.24,seaAmount) };
@@ -795,7 +827,7 @@
       gl.uniform1f(uniforms.night, sky.night);
       gl.uniform1f(uniforms.fogStart, underwater>.1 ? 12 : view === 'aerial' ? 86-springMist*26 : 25-springMist*8);
       const airRange = season.id==='summer' ? 244 : 220-springMist*89;
-      gl.uniform1f(uniforms.fogRange,W.mix(airRange,60,underwater));
+      gl.uniform1f(uniforms.fogRange,W.mix(W.mix(airRange,365,valleyAmount),60,underwater));
       gl.uniform1f(uniforms.aquarium,underwater);
       if (season!==lastSeason) {
         gl.uniform4fv(uniforms.seasonGround,season.ground);
@@ -812,7 +844,7 @@
       gl.uniform2f(uniforms.seaShine,Math.sin(shinePhase),Math.cos(shinePhase));
       const angle=p=>W.wrap(p+Math.PI,Math.PI*2)-Math.PI;
       gl.uniform3f(uniforms.seaAngles,angle(phaseA),angle(phaseB),angle(shinePhase));
-      for (const mesh of localScenery(cam.target)) draw(mesh);
+      for (const mesh of localScenery(cam.target,valleyAmount>0)) draw(mesh);
       if (season.id==='spring' && Seasons.nearFlowers(cam.target)) {
         springFlowers ||= buffer(Seasons.springFlowers());
         draw(springFlowers);
@@ -822,6 +854,11 @@
         draw(sea.reef);draw(sea.frames);
         drawSeaAnimals(reducedMotion.matches ? 0 : seconds);
       }
+      if (valleyAmount>0) {
+        prepareValley();
+        draw(dreamValley.objects);
+        if (view==='cabin') draw(dreamValley.moon);
+      }
       if (view === 'aerial') {
         for (let i = 0; i < 4; i++) {
           const d = distance - i * 3.8;
@@ -830,6 +867,12 @@
         drawVapor(minute, seconds, cam.fov);
       }
       if (nearSea) drawSeaGlass(reducedMotion.matches ? 0 : seconds);
+      if (valleyAmount>0) {
+        drawTransparent(dreamValley.halos);
+        gl.uniform1f(uniforms.valleyCloud,valleyAmount);
+        drawTransparent(dreamValley.clouds,Valley.cloudDrift(reducedMotion.matches ? 0 : seconds));
+        gl.uniform1f(uniforms.valleyCloud,0);
+      }
       const flurry = season.id==='winter' && !reducedMotion.matches ? Seasons.snowStrength(minute,cam.target[0],cam.target[2]) : 0;
       if (flurry>0) {
         Seasons.snow(seconds,flurry,snowData);

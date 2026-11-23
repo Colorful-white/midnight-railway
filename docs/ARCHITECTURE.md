@@ -13,6 +13,7 @@
 | `world.js` | 全局词法常量 `RailwayWorld`；闭合线路、时刻插值、地形、地物、轨道和车体网格 |
 | `seasons.js` | `RailwaySeasons`；四天轮换、季节材质和光照参数、薄雾、余晖、春花和局部飘雪 |
 | `mint-sea.js` | `MintSea`；薄荷海静态网格、鱼群、鳐鱼和场景影响范围 |
+| `dream-valley.js` | `DreamValley`；眠云谷灯、云层和月亮网格、局部光照影响与分段俯视取景 |
 | `cabin.js` | `CabinScene`；窗台、花、合书、茶杯及动态热气 |
 | `railway.js` | UI 行为、时间、镜头、光照、WebGL 着色器、缓冲与动画帧 |
 | `manifest.webmanifest` | PWA 身份、名称、启动路径、显示方式、图标 |
@@ -20,7 +21,7 @@
 | `build.mjs` | Node.js 构建；白名单复制源文件并替换 SW 版本 |
 | `.github/workflows/pages.yml` | `main` 推送后构建和部署 GitHub Pages |
 
-脚本顺序：`launch.js → app-install.js → world.js → seasons.js → mint-sea.js → cabin.js → railway.js`。所有 `defer` 脚本在 DOM 解析后执行。世界数据必须早于季节、薄荷海和车窗前景，这三个模块必须早于主渲染器。
+脚本顺序：`launch.js → app-install.js → world.js → seasons.js → mint-sea.js → dream-valley.js → cabin.js → railway.js`。所有 `defer` 脚本在 DOM 解析后执行。世界数据必须早于季节、两处景观和车窗前景，这些模块必须早于主渲染器。
 
 没有模块打包器；`RailwayWorld`、`MintSea`、`CabinScene` 是脚本之间共享的顶层词法绑定，不应假设它们等同于 `window` 属性。
 
@@ -64,6 +65,12 @@
 4. 入口还涉及脚本顺序、构建白名单和 SW 缓存白名单。
 
 新增或调整站点时不能只改数组中的时刻，也不能任意调换 `stops` 顺序后假设薄荷海仍能正常引用。
+
+## 眠云谷
+
+谷地位于既有返程铁路线与出程铁路线之间。`world.js` 的地形函数在中段塑造高山壁、下陷的谷底、睡鹿山脊和小屋的坡肩台地。23:10 和 23:17 的里程取自原时刻插值，观景标记不改变线路或插值节点。谷内分段俯视按里程平滑展开，车窗仍跟随车厢。
+
+`DreamValley` 以固定世界坐标生成灯、石径、杉林、守梦小屋、体积云形和月亮，渲染器首次入谷时上传一次。更高密度的云集中在下陷区。云的淡出由观察角度、距离和有限的场景范围共同控制，平移使用可暂停的动效时间。云纹坐标在顶点着色器中减去景观中心，避免在低精度片元计算里直接使用较大的世界坐标。
 
 ## 光斑精度与更新机制
 

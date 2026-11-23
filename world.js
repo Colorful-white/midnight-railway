@@ -30,6 +30,26 @@ const RailwayWorld = (() => {
   const tree = { x: -108, z: -32 };
   const lake = { x: 95, z: -6 };
   const sea = { x: 8910, z: 572, surface: 3.2, floor: -11.5, startNode: 0, endNode: 0 };
+  const dream = { x: 5604, z: 337, minute: 1390, duration: 7, cottage: [5624,573] };
+  // The softer skyline suggests a curled deer through the crest of a real ridge.
+  const sleepingRidge = [
+    [-116,0],[-91,8],[-76,14],[-66,23],[-54,25],[-45,33],[-37,46],[-32,40],[-26,43],
+    [-19,35],[-12,30],[-1,33],[16,49],[37,57],[58,55],[77,46],[93,29],[109,15],[128,0]
+  ];
+  function sleepingCrest(x) {
+    const local = x-dream.x;
+    if (local<=sleepingRidge[0][0] || local>=sleepingRidge.at(-1)[0]) return 0;
+    const end = sleepingRidge.findIndex(([edge]) => edge>local);
+    const [a,b] = [sleepingRidge[end-1],sleepingRidge[end]];
+    return mix(a[1],b[1],smooth((local-a[0])/(b[0]-a[0])));
+  }
+  function dreamGround(x,z) {
+    if (x<=4940 || x>=6290 || z<=210 || z>=652) return 0;
+    const basin = smooth(clamp((x-5100)/300,0,1))*smooth(clamp((6110-x)/280,0,1));
+    const nearRim = smooth(clamp((x-5435)/114,0,1))*smooth(clamp((5865-x)/114,0,1));
+    const edge = Math.min((x-4940)/134,(6290-x)/150,(z-210)/40,(515+110*basin+27*nearRim-z)/51);
+    return smooth(clamp(edge,0,1));
+  }
   // Negative material markers above -.5 never participate in the water or alpha passes.
   const seasonalMaterial = { evergreen: -.10, grass: -.20, ground: -.30, snow: -.48 };
   const controls = [];
@@ -192,6 +212,9 @@ const RailwayWorld = (() => {
     const delta = sub(position(distance + 0.45), position(distance - 0.45));
     return unit([delta[0], 0, delta[2]]);
   }
+  const dreamStop = {name:'眠云谷', minute:dream.minute, duration:dream.duration,
+    distance:distanceAt(dream.minute), endDistance:distanceAt(dream.minute+dream.duration)};
+  stops.push(dreamStop);
   const chapters = [
     { name: '零点小站', node: 0 },
     { name: '西岸杉林', node: west },
@@ -202,8 +225,10 @@ const RailwayWorld = (() => {
     { name: '东岸高架', node: east },
     { name: '薄荷海', node: sea.startNode },
     { name: '海岸归途', node: sea.endNode },
+    { name: dreamStop.name, distance: dreamStop.distance },
+    { name: '月下归途', distance: dreamStop.endDistance },
     { name: '南岸原野', node: south }
-  ].map((chapter, index) => ({ ...chapter, index, distance: nodeDistances[chapter.node] }));
+  ].map((chapter, index) => ({ ...chapter, index, distance: chapter.distance ?? nodeDistances[chapter.node] }));
   const featureShots = [
     { stop: stops[0], aim: [-49, 0, 76], radius: 54, before: 24, after: 28 },
     { stop: stops[1], aim: [-112, 7, -31], radius: 61, before: 16, after: 26 },
@@ -269,7 +294,20 @@ const RailwayWorld = (() => {
     const ordinary = -0.5 + 0.36 * Math.sin(x * 0.105 + z * 0.07) + 0.34 * Math.cos(z * 0.13) + farHills - hollow + outer * country;
     const basin = Math.hypot((x-sea.x)/190,(z-sea.z)/140);
     const depth = 1-smooth(clamp((basin-.65)/.45,0,1));
-    return mix(ordinary,sea.floor+.28*Math.sin(x*.13)*Math.cos(z*.11),depth);
+    const basinFloor = mix(ordinary,sea.floor+.28*Math.sin(x*.13)*Math.cos(z*.11),depth);
+    const valley = dreamGround(x,z);
+    if (!valley) return basinFloor;
+    const hill = (cx,cz,wide,deep,height) => height*Math.exp(-(((x-cx)/wide)**2+((z-cz)/deep)**2));
+    const farRange = hill(5950,250,230,47,52)+hill(5385,238,235,52,43);
+    const cliffs = hill(5488,340,71,84,122)+hill(5755,315,81,92,139)+hill(5832,345,55,67,63);
+    const banks = hill(6045,460,106,54,31)+hill(5230,361,164,66,32)+hill(5805,528,69,26,8);
+    const crescent = sleepingCrest(x)*1.33*Math.exp(-(((z-dream.z)/50)**2));
+    const pocket = 49*Math.exp(-(((x-5648)/152)**4+((z-460)/98)**4));
+    const floor = -3.2+1.15*Math.sin(x*.016+z*.031)-pocket;
+    const [cottageX,cottageZ] = dream.cottage;
+    const shelf = Math.exp(-(((x-cottageX)/42)**6+((z-cottageZ)/29)**6));
+    const valleyHeight = mix(floor+farRange+cliffs+banks+crescent,15.2,shelf);
+    return mix(basinFloor,valleyHeight,valley);
   }
   const ground = new Mesh();
   const scenery = new Mesh();
@@ -293,8 +331,17 @@ const RailwayWorld = (() => {
         return mix(seasonalMaterial.ground,seasonalMaterial.snow,snow);
       });
     }
-    mesh.triangle(a, b, c, tint(base, shade), drifts[0],drifts[1],drifts[2]);
-    mesh.triangle(a, c, d, tint(base, shade * between(.95, 1.05)), drifts[0],drifts[2],drifts[3]);
+    const dreamShade = smooth(clamp(Math.min((x-4880)/180,(6310-x)/220,(z-201)/50,(778-z)/96),0,1));
+    const color = tint(base,shade);
+    if (dreamShade) {
+      const stone = tint(z<300 ? 0x5d5c70 : z<413 ? 0x41445c : 0x3d4351,shade);
+      const rockExposure = smooth(clamp((a[1]-21)/79,0,1));
+      const ridge = stone.map((v,i) => mix(v,[.40,.40,.51][i]*shade,rockExposure));
+      for (let i=0;i<color.length;i++) color[i] = mix(color[i],ridge[i],dreamShade);
+    }
+    if (dreamShade>.58) drifts = [0,0,0,0];
+    mesh.triangle(a, b, c, color, drifts[0],drifts[1],drifts[2]);
+    mesh.triangle(a, c, d, mul(color,between(.95,1.05)), drifts[0],drifts[2],drifts[3]);
   }
   for (let z = core.north; z < core.south; z += step) {
     for (let x = core.left; x < core.right; x += step) {
@@ -542,7 +589,8 @@ const RailwayWorld = (() => {
     for (let i = 0; i < 86; i++) {
       const x = left + between(0, tileSize);
       const z = north + between(0, tileSize);
-      if (insideCore(x, z) || nearRail(x, z, 4.8) || Math.hypot((x-sea.x)/190,(z-sea.z)/140)<1.13) continue;
+      if (insideCore(x, z) || nearRail(x, z, 4.8) || Math.hypot((x-sea.x)/190,(z-sea.z)/140)<1.13
+        || (x>4990 && x<6190 && z>204 && z<712)) continue;
       const woods = Math.sin(x * .019 + z * .028) + Math.cos(z * .043 - x * .011);
       const meadow = x > 310 && z > 100;
       if (woods > (meadow ? .78 : -.12)) {
@@ -550,7 +598,7 @@ const RailwayWorld = (() => {
       } else {
         const rock = z < -280 && random() > .66;
         const color = rock ? 0x909183 : pick([0x8a925e, 0xa09768, 0x647750]);
-      mesh.cone(x, terrain(x, z), z, between(.4, 2), .12, rock ? between(1.1, 3) : between(.25, .95), tint(color), 5, 0, rock ? 0 : seasonalMaterial.grass);
+        mesh.cone(x, terrain(x, z), z, between(.4, 2), .12, rock ? between(1.1, 3) : between(.25, .95), tint(color), 5, 0, rock ? 0 : seasonalMaterial.grass);
       }
     }
     seed = savedSeed;
@@ -578,6 +626,6 @@ const RailwayWorld = (() => {
   }
 
   return { Mesh, DAY, clamp, wrap, mix, smooth, add, sub, mul, dot, cross, unit, stops, chapters, featureShots,
-    total, distanceAt, position, heading, core, sea, seasonalMaterial, groundHeight:terrain, nearRail, tileSize, railSections, railMesh, countryMesh, terrain: ground.data, scenery: scenery.data,
+    total, distanceAt, position, heading, core, sea, dream, seasonalMaterial, groundHeight:terrain, nearRail, tileSize, railSections, railMesh, countryMesh, terrain: ground.data, scenery: scenery.data,
     engine: trainCar(true), coach: trainCar(false) };
 })();
