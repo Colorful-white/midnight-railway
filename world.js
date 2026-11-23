@@ -30,7 +30,7 @@ const RailwayWorld = (() => {
   const tree = { x: -108, z: -32 };
   const lake = { x: 95, z: -6 };
   const sea = { x: 8910, z: 572, surface: 3.2, floor: -11.5, startNode: 0, endNode: 0 };
-  const dream = { x: 5604, z: 337, minute: 1390, duration: 7, cottage: [5624,573] };
+  const dream = { x: 5604, z: 337, minute: 1390, duration: 7, basin: [5648,460], cottage: [5624,573] };
   // The softer skyline suggests a curled deer through the crest of a real ridge.
   const sleepingRidge = [
     [-116,0],[-91,8],[-76,14],[-66,23],[-54,25],[-45,33],[-37,46],[-32,40],[-26,43],
@@ -302,7 +302,8 @@ const RailwayWorld = (() => {
     const cliffs = hill(5488,340,71,84,122)+hill(5755,315,81,92,139)+hill(5832,345,55,67,63);
     const banks = hill(6045,460,106,54,31)+hill(5230,361,164,66,32)+hill(5805,528,69,26,8);
     const crescent = sleepingCrest(x)*1.33*Math.exp(-(((z-dream.z)/50)**2));
-    const pocket = 49*Math.exp(-(((x-5648)/152)**4+((z-460)/98)**4));
+    const [basinX,basinZ] = dream.basin;
+    const pocket = 49*Math.exp(-(((x-basinX)/152)**4+((z-basinZ)/98)**4));
     const floor = -3.2+1.15*Math.sin(x*.016+z*.031)-pocket;
     const [cottageX,cottageZ] = dream.cottage;
     const shelf = Math.exp(-(((x-cottageX)/42)**6+((z-cottageZ)/29)**6));
@@ -314,7 +315,56 @@ const RailwayWorld = (() => {
   const step = 5;
   const core = { left: -260, right: 255, north: -235, south: 215 };
   const insideCore = (x, z) => x >= core.left && x < core.right && z >= core.north && z < core.south;
-  function groundCell(mesh, x, z) {
+  const valleyDetail = {left:5430,right:5850,north:260,south:615};
+  function valleyTones(x,z) {
+    return smooth(clamp(Math.min((x-4880)/180,(6310-x)/220,(z-201)/50,(778-z)/96),0,1));
+  }
+  function valleyVertex(x,z,cache) {
+    const key = x+','+z;
+    if (cache.has(key)) return cache.get(key);
+    const half = step/2;
+    let y = terrain(x,z);
+    // Share the coarse edge of the surrounding tiles at the refined mesh boundary.
+    if ((x===valleyDetail.left || x===valleyDetail.right) && z%step) {
+      y = (terrain(x,z-half)+terrain(x,z+half))/2;
+    } else if ((z===valleyDetail.north || z===valleyDetail.south) && x%step) {
+      y = (terrain(x-half,z)+terrain(x+half,z))/2;
+    }
+    const normal = unit([terrain(x-half,z)-terrain(x+half,z),step,terrain(x,z-half)-terrain(x,z+half)]);
+    const exposure = smooth(clamp((y-12)/72,0,1));
+    const rock = smooth(clamp((1-normal[1]-.08)/.57,0,1)) * exposure;
+    const seam = Math.sin(y*.168+x*.016+Math.sin(z*.058)*.56)+.48*Math.sin(y*.39-z*.021);
+    const stratum = (smooth(clamp((seam+.65)/1.35,0,1))-.45)*rock;
+    const rear = 1-smooth(clamp((z-281)/155,0,1));
+    const floor = [.230,.247,.305], distant = [.320,.323,.419], cliff = [.386,.382,.474];
+    const variation = .96+.038*Math.sin(x*.041+z*.061);
+    const color = floor.map((base,i) => mix(mix(base,distant[i],rear),cliff[i],exposure)*variation+stratum*.10);
+    const sample = {point:[x,y,z],normal,color,amount:valleyTones(x,z)};
+    cache.set(key,sample);
+    return sample;
+  }
+  function valleyCell(mesh,x,z,cache,baseColor,snow) {
+    const detail = valleyDetail;
+    const inside = x>=detail.left && x<detail.right && z>=detail.north && z<detail.south;
+    const span = inside ? step/2 : step;
+    const vertices = (coords) => {
+      const points = coords.map(([px,pz]) => valleyVertex(px,pz,cache));
+      const [a,b,c] = points.map(({point}) => point);
+      const flat = unit(cross(sub(b,a),sub(c,a)));
+      for (const {point,normal,color,amount} of points) {
+        const shading = amount>.999 ? normal : unit(flat.map((v,i) => mix(v,normal[i],amount)));
+        const paint = amount>.999 ? color : baseColor.map((v,i) => mix(v,color[i],amount));
+        const frost = amount>.58 ? 0 : snow;
+        mesh.data.push(...point,...shading,...paint,frost);
+      }
+    };
+    for (let pz=z;pz<z+step;pz+=span) for (let px=x;px<x+step;px+=span) {
+      const a=[px,pz], b=[px,pz+span], c=[px+span,pz+span], d=[px+span,pz];
+      vertices([a,b,c]);
+      vertices([a,c,d]);
+    }
+  }
+  function groundCell(mesh, x, z, valleyCache) {
     const [a, b, c, d] = [[x,z], [x,z+step], [x+step,z+step], [x+step,z]].map(([px,pz]) => [px,terrain(px,pz),pz]);
     const distance = Math.hypot((x - lake.x) / 65, (z - lake.z) / 62);
     const basin = Math.hypot((x-sea.x)/190,(z-sea.z)/140);
@@ -331,17 +381,14 @@ const RailwayWorld = (() => {
         return mix(seasonalMaterial.ground,seasonalMaterial.snow,snow);
       });
     }
-    const dreamShade = smooth(clamp(Math.min((x-4880)/180,(6310-x)/220,(z-201)/50,(778-z)/96),0,1));
     const color = tint(base,shade);
-    if (dreamShade) {
-      const stone = tint(z<300 ? 0x5d5c70 : z<413 ? 0x41445c : 0x3d4351,shade);
-      const rockExposure = smooth(clamp((a[1]-21)/79,0,1));
-      const ridge = stone.map((v,i) => mix(v,[.40,.40,.51][i]*shade,rockExposure));
-      for (let i=0;i<color.length;i++) color[i] = mix(color[i],ridge[i],dreamShade);
+    const secondShade = between(.95,1.05);
+    if (valleyCache && x<6310 && x+step>4880 && z<778 && z+step>201) {
+      valleyCell(mesh,x,z,valleyCache,color,drifts[0]);
+      return;
     }
-    if (dreamShade>.58) drifts = [0,0,0,0];
     mesh.triangle(a, b, c, color, drifts[0],drifts[1],drifts[2]);
-    mesh.triangle(a, c, d, mul(color,between(.95,1.05)), drifts[0],drifts[2],drifts[3]);
+    mesh.triangle(a, c, d, mul(color,secondShade), drifts[0],drifts[2],drifts[3]);
   }
   for (let z = core.north; z < core.south; z += step) {
     for (let x = core.left; x < core.right; x += step) {
@@ -579,11 +626,12 @@ const RailwayWorld = (() => {
     const mesh = new Mesh();
     const left = column * tileSize;
     const north = row * tileSize;
+    const valleyCache = left<6310 && left+tileSize>4880 && north<778 && north+tileSize>201 ? new Map() : null;
     const savedSeed = seed;
     seed = Math.imul(column, 73856093) ^ Math.imul(row, 19349663) ^ 18601;
     for (let z = north; z < north + tileSize; z += step) {
       for (let x = left; x < left + tileSize; x += step) {
-        if (!insideCore(x, z)) groundCell(mesh, x, z);
+        if (!insideCore(x, z)) groundCell(mesh, x, z,valleyCache);
       }
     }
     for (let i = 0; i < 86; i++) {

@@ -467,14 +467,20 @@
     uniform vec4 seasonGround, seasonGrass, seasonTrees;
     uniform float snowCover;
     uniform mediump float pointScale, valleyCloud;
+    uniform vec3 bankSize;
+    uniform float bankLean;
     varying vec3 shade;
-    varying vec3 location, seaPosition, valleyPosition;
-    varying float depth, emission, cloudFacing;
+    varying vec3 location, seaPosition, bankPosition, valleyLocal;
+    varying float depth, emission;
     vec3 rotate(vec3 p) {
       return vec3(heading.x*p.x-heading.y*p.z,p.y,heading.y*p.x+heading.x*p.z);
     }
     void main() {
       vec3 world = rotate(position * modelScale) + offset;
+      if (valleyCloud > 0.0) {
+        world = position * bankSize + offset;
+        world.y += position.x * bankLean;
+      }
       vec4 point = camera * vec4(world, 1.0);
       float diffuse = max(dot(rotate(normal), sun), 0.0);
       vec3 materialColor = color;
@@ -494,12 +500,8 @@
       depth = length(point.xyz);
       location = world;
       seaPosition = world - vec3(${W.sea.x.toFixed(1)},0.0,${W.sea.z.toFixed(1)});
-      valleyPosition = world - vec3(${W.dream.x.toFixed(1)},0.0,${W.dream.z.toFixed(1)});
-      cloudFacing = 1.0;
-      if (valleyCloud > 0.0) {
-        vec3 bankNormal = normalize((camera * vec4(rotate(normal),0.0)).xyz);
-        cloudFacing = abs(dot(bankNormal,normalize(point.xyz)));
-      }
+      bankPosition = position;
+      valleyLocal = world - vec3(${W.dream.basin[0].toFixed(1)},0.0,${W.dream.basin[1].toFixed(1)});
       gl_Position = projection * point;
       gl_PointSize = clamp(normal.x * pointScale / max(.1, -point.z), 1.0, 40.0);
     }`;
@@ -514,26 +516,68 @@
     uniform vec4 seaPhase;
     uniform vec2 seaShine;
     uniform vec3 seaAngles;
+    uniform vec2 valleyPhase;
+    uniform vec2 bankTexture;
+    uniform vec3 bankEye, bankTint;
+    uniform vec3 valleyEye, floorDrift;
+    uniform float valleyAir;
     uniform mediump float pointScale, valleyCloud;
     varying vec3 shade;
-    varying vec3 location, seaPosition, valleyPosition;
-    varying float depth, emission, cloudFacing;
+    varying vec3 location, seaPosition, bankPosition, valleyLocal;
+    varying float depth, emission;
+    float fogDensity(vec3 p) {
+      vec3 q = p * vec3(3.1,2.5,3.3) + vec3(bankTexture.x,0.0,bankTexture.y);
+      float winding = sin(q.x + 1.45*sin(q.z*.91+valleyPhase.x)+q.y*.75);
+      float curls = cos(q.z*1.85-q.x*.74+.92*sin(q.y*1.88+valleyPhase.y));
+      float grain = sin(q.x*2.21+q.z*1.53+q.y*1.85);
+      float folds = smoothstep(-.80,.80,.55*winding+.31*curls+.14*grain);
+      return max(0.0,1.0-dot(p,p)) * mix(.48,1.23,folds);
+    }
+    float bedThickness(vec3 center,vec3 size) {
+      // Limit the cloud integral to the opaque surface receiving the fog.
+      vec3 eye = (valleyEye-center) / size;
+      vec3 span = (valleyLocal-valleyEye) / size;
+      float range = length(span);
+      vec3 ray = span/max(.001,range);
+      float mid = -dot(eye,ray);
+      vec3 closest = eye+ray*mid;
+      float radius = max(0.0,1.0-dot(closest,closest));
+      float chord = sqrt(radius);
+      float a = max(0.0,mid-chord)-mid;
+      float b = min(range,mid+chord)-mid;
+      if (b <= a) return 0.0;
+      vec3 centerSample = closest+ray*(a+b)*.5;
+      float creases = .75+.25*sin(centerSample.x*4.7+sin(centerSample.z*3.1+valleyPhase.x)*1.63+valleyPhase.y);
+      return max(0.0,(b-a)*(radius-(b*b+a*b+a*a)/3.0))*creases;
+    }
     void main() {
       if (pointScale > 0.0) {
         float edge = 1.0 - smoothstep(.10, .49, distance(gl_PointCoord, vec2(.5)));
         gl_FragColor = vec4(mix(pointTint, mist, night * .52), edge * emission);
         return;
       }
+      if (valleyCloud > 0.0) {
+        // Integrate along the chord through the fog, so the rim has vanishing thickness.
+        vec3 ray = normalize(bankPosition-bankEye);
+        float nearest = -dot(bankEye,ray);
+        vec3 middle = bankEye+ray*nearest;
+        float halfChord = sqrt(max(0.0,1.0-dot(middle,middle)));
+        float enter = max(0.0,nearest-halfChord);
+        float leave = nearest+halfChord;
+        if (leave-enter < .003) discard;
+        vec3 p0 = bankEye+ray*mix(enter,leave,.20);
+        vec3 p1 = bankEye+ray*mix(enter,leave,.50);
+        vec3 p2 = bankEye+ray*mix(enter,leave,.80);
+        float thickness = (leave-enter)*(.29*fogDensity(p0)+.42*fogDensity(p1)+.29*fogDensity(p2));
+        float distanceFade = 1.0-smoothstep(370.0,620.0,depth);
+        float alpha = (1.0-exp(-thickness*1.94*valleyCloud))*distanceFade;
+        vec3 bankLight = bankTint*mix(.68,.95,smoothstep(-.67,.68,p1.y));
+        gl_FragColor = vec4(mix(bankLight,mist,.37),alpha);
+        return;
+      }
       if (emission < -1.5) {
         float alpha = clamp(-emission - 2.0, 0.0, 1.0);
         vec3 transparentColor = shade * light;
-        if (valleyCloud > 0.0) {
-          float folds = .78 + .22*sin(valleyPosition.x*.056 + sin(valleyPosition.z*.09)*1.16);
-          float distanceFade = 1.0-smoothstep(370.0,620.0,depth);
-          float softEdge = smoothstep(.09,.85,cloudFacing);
-          gl_FragColor = vec4(mix(shade,mist,.34), alpha*folds*distanceFade*softEdge*valleyCloud);
-          return;
-        }
         if (alpha>.13 && alpha<.15 && abs(seaPosition.y-${W.sea.surface.toFixed(1)})<.03 && abs(seaPosition.x)<190.0 && abs(seaPosition.z)<140.0) {
           float pattern = seaPosition.x*.35+sin(seaPosition.z*.22);
           #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -579,7 +623,18 @@
       float air = smoothstep(fogStart, fogStart + fogRange, depth) * .72;
       air = mix(air,smoothstep(fogStart,fogStart+fogRange,depth)*.999,aquarium);
       air *= mix(clamp(1.05 - location.y * .009, .74, 1.1),1.0,aquarium);
-      gl_FragColor = vec4(mix(color, mist, air), 1.0);
+      color = mix(color,mist,air);
+      if (valleyAir > 0.0) {
+        float basin = 1.0-smoothstep(.55,1.17,length(valleyLocal.xz/vec2(251.0,133.0)));
+        float low = 1.0-smoothstep(-43.0,11.0,valleyLocal.y);
+        float haze = valleyAir*basin*low*smoothstep(50.0,160.0,depth)*.27;
+        color = mix(color,mix(mist,vec3(.42,.43,.55),.52),haze);
+        float deepBed = bedThickness(vec3(4.0,-21.0,12.0)+floorDrift,vec3(194.0,29.0,89.0));
+        float shallows = bedThickness(vec3(-58.0,-12.0,43.0)+floorDrift*.64,vec3(135.0,17.0,57.0));
+        float coverage = 1.0-exp(-(deepBed*.49+shallows*.41)*valleyAir);
+        color = mix(color,mix(mist,vec3(.57,.57,.72),.64),coverage);
+      }
+      gl_FragColor = vec4(color,1.0);
     }`;
 
   function makeRenderer() {
@@ -597,7 +652,7 @@
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
     gl.useProgram(program);
-    const uniforms = Object.fromEntries(['projection','camera','offset','sun','heading','modelScale','light','mist','night','fogStart','fogRange','aquarium','rippleTime','seaPhase','seaShine','seaAngles','pointScale','pointTint','seasonGround','seasonGrass','seasonTrees','snowCover','valleyCloud']
+    const uniforms = Object.fromEntries(['projection','camera','offset','sun','heading','modelScale','light','mist','night','fogStart','fogRange','aquarium','rippleTime','seaPhase','seaShine','seaAngles','pointScale','pointTint','seasonGround','seasonGrass','seasonTrees','snowCover','valleyCloud','valleyPhase','bankSize','bankLean','bankEye','bankTint','bankTexture','valleyAir','valleyEye','floorDrift']
       .map(name => [name, gl.getUniformLocation(program,name)]));
     const attributes = ['position','normal','color','glow'].map(name => gl.getAttribLocation(program,name));
     for (const location of attributes) gl.enableVertexAttribArray(location);
@@ -729,6 +784,7 @@
       gl.uniform3fv(uniforms.light,sky.light.map((value,i) => W.mix([.95,.89,.78][i],value,.28)));
       gl.uniform1f(uniforms.fogStart,1000);
       gl.uniform1f(uniforms.aquarium,0);
+      gl.uniform1f(uniforms.valleyAir,0);
       drawTransparent(cabin.glass);
       draw(cabin.sill);
       drawTransparent(cabin.shadows);
@@ -756,6 +812,33 @@
     function prepareValley() {
       if (dreamValley) return;
       dreamValley = Object.fromEntries(Object.entries(Valley.create()).map(([name,data]) => [name,buffer(data)]));
+    }
+    function drawValleyClouds(amount,eye,seconds) {
+      const ordered = Valley.cloudVolumes(seconds).map(volume => {
+        const delta = W.sub(eye,volume.center);
+        return { ...volume, delta, depth:W.dot(delta,delta) };
+      }).sort((a,b) => b.depth-a.depth);
+      gl.enable(gl.BLEND);
+      gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+      gl.enable(gl.CULL_FACE);
+      for (const {center,size,tint,density,lean,delta} of ordered) {
+        const x = delta[0]/size[0];
+        const bankEye = [x,(delta[1]-x*lean)/size[1],delta[2]/size[2]];
+        gl.cullFace(W.dot(bankEye,bankEye)<1 ? gl.FRONT : gl.BACK);
+        gl.uniform3fv(uniforms.bankSize,size);
+        gl.uniform1f(uniforms.bankLean,lean);
+        gl.uniform3fv(uniforms.bankEye,bankEye);
+        gl.uniform3fv(uniforms.bankTint,tint);
+        gl.uniform2f(uniforms.bankTexture,(center[0]-W.dream.x)*.029,(center[2]-W.dream.z)*.037);
+        gl.uniform1f(uniforms.valleyCloud,amount*density);
+        draw(dreamValley.cloud,center);
+      }
+      gl.uniform1f(uniforms.valleyCloud,0);
+      gl.cullFace(gl.BACK);
+      gl.disable(gl.CULL_FACE);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
     }
     function drawSeaAnimals(seconds) {
       for (const fish of MintSea.fish(seconds)) {
@@ -829,6 +912,7 @@
       const airRange = season.id==='summer' ? 244 : 220-springMist*89;
       gl.uniform1f(uniforms.fogRange,W.mix(W.mix(airRange,365,valleyAmount),60,underwater));
       gl.uniform1f(uniforms.aquarium,underwater);
+      gl.uniform1f(uniforms.valleyAir,valleyAmount);
       if (season!==lastSeason) {
         gl.uniform4fv(uniforms.seasonGround,season.ground);
         gl.uniform4fv(uniforms.seasonGrass,season.grass);
@@ -839,6 +923,12 @@
       gl.uniform1f(uniforms.rippleTime, minute * .47);
       // Bounded angles on highp GPUs; unit rotors on mediump GPUs avoid rounded, frozen time.
       const seaSeconds=reducedMotion.matches ? 0 : seconds;
+      if (valleyAmount>0) {
+        const phase = seaSeconds*.034;
+        gl.uniform2f(uniforms.valleyPhase,Math.sin(phase),Math.cos(phase));
+        gl.uniform3fv(uniforms.valleyEye,W.sub(cam.eye,[W.dream.basin[0],0,W.dream.basin[1]]));
+        gl.uniform3fv(uniforms.floorDrift,Valley.floorDrift(seaSeconds));
+      }
       const phaseA=seaSeconds*.15,phaseB=1.7-seaSeconds*.125,shinePhase=seaSeconds*.025-.2;
       gl.uniform4f(uniforms.seaPhase,Math.sin(phaseA),Math.cos(phaseA),Math.sin(phaseB),Math.cos(phaseB));
       gl.uniform2f(uniforms.seaShine,Math.sin(shinePhase),Math.cos(shinePhase));
@@ -869,9 +959,7 @@
       if (nearSea) drawSeaGlass(reducedMotion.matches ? 0 : seconds);
       if (valleyAmount>0) {
         drawTransparent(dreamValley.halos);
-        gl.uniform1f(uniforms.valleyCloud,valleyAmount);
-        drawTransparent(dreamValley.clouds,Valley.cloudDrift(reducedMotion.matches ? 0 : seconds));
-        gl.uniform1f(uniforms.valleyCloud,0);
+        drawValleyClouds(valleyAmount,cam.eye,seaSeconds);
       }
       const flurry = season.id==='winter' && !reducedMotion.matches ? Seasons.snowStrength(minute,cam.target[0],cam.target[2]) : 0;
       if (flurry>0) {

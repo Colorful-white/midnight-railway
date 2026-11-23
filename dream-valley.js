@@ -132,42 +132,37 @@ const DreamValley = (() => {
     }
   }
 
-  function cloudBank(mesh,x,z,radiusX,radiusZ,base,height,tint,density) {
-    const rows = 10, sides = 36;
+  const strands = [
+    [5750,390,95,20,18,6.4,[.64,.66,.82],.16,8],
+    [5640,410,131,25,4,5.6,[.70,.70,.85],.18,-6],
+    [5543,446,107,22,-3,4.6,[.73,.72,.85],.17,5],
+    [5525,382,86,16,28,5.3,[.60,.63,.80],.10,7],
+    [5614,493,116,24,-4,5.8,[.70,.71,.88],.18,8],
+    [5695,514,89,15,-2,4.4,[.71,.73,.86],.11,-5],
+    [5272,406,130,49,5,7,[.56,.59,.76],.08,1]
+  ];
+
+  function cloudProxy() {
+    const mesh = new W.Mesh(), rows = 14, sides = 32;
     const sample = (row,side) => {
-      const a = side*Math.PI*2/sides, latitude = row*Math.PI/rows;
-      const radial = Math.sin(latitude);
-      const px = radial*Math.cos(a), py = Math.cos(latitude), pz = radial*Math.sin(a);
-      const edge = 1+.13*Math.sin(a*3+x*.04)+.10*Math.cos(a*5+z*.07);
-      const position = [x+radiusX*px*edge,base+height*py+px*2.4+1.1*Math.sin(px*7+z*.10),z+radiusZ*pz*edge];
-      const normal = W.unit([px,py*.42,pz]);
-      return [...position,...normal,...tint,-2-density];
+      const lon = side*Math.PI*2/sides, lat = row*Math.PI/rows;
+      return [Math.sin(lat)*Math.cos(lon),Math.cos(lat),Math.sin(lat)*Math.sin(lon)];
     };
-    const rings = Array.from({length:rows+1},(_,row)=>Array.from({length:sides+1},(_,side)=>sample(row,side)));
+    const neutral = [1,1,1];
     for (let row=0;row<rows;row++) for (let side=0;side<sides;side++) {
-      const a=rings[row][side], b=rings[row+1][side], c=rings[row+1][side+1], d=rings[row][side+1];
-      if (row) mesh.data.push(...a,...b,...d);
-      if (row<rows-1) mesh.data.push(...b,...c,...d);
+      const a=sample(row,side), b=sample(row+1,side), c=sample(row+1,side+1), d=sample(row,side+1);
+      if (row) mesh.triangle(a,d,b,neutral);
+      if (row<rows-1) mesh.triangle(b,d,c,neutral);
     }
+    return mesh.data;
   }
 
   function create() {
-    const objects=new W.Mesh(), halos=new W.Mesh(), clouds=new W.Mesh(), moon=new W.Mesh();
+    const objects=new W.Mesh(), halos=new W.Mesh(), moon=new W.Mesh();
     lanterns(objects,halos);
     groves(objects);
     stonePath(objects);
     cottage(objects,halos);
-    const banks = [
-      [5820,449,101,56,-8,13,[.69,.69,.84],.24],
-      [5744,475,91,49,-18,20,[.74,.73,.86],.36],
-      [5642,446,125,57,-19,19,[.77,.75,.88],.40],
-      [5556,474,105,54,-20,20,[.72,.71,.85],.34],
-      [5593,520,108,38,-11,15,[.71,.72,.87],.29],
-      [5680,518,120,33,-15,15,[.69,.71,.87],.27],
-      [5453,453,86,40,-1,14,[.66,.67,.81],.21],
-      [5272,406,130,49,5,7,[.57,.59,.76],.10]
-    ];
-    for (const bank of banks) cloudBank(clouds,...bank);
     const moonPoint = (ring,side) => {
       const angle = side*Math.PI/8;
       const latitude = ring*Math.PI/12;
@@ -177,14 +172,25 @@ const DreamValley = (() => {
     for (let ring=0;ring<12;ring++) for (let side=0;side<16;side++) {
       moon.quad(moonPoint(ring,side),moonPoint(ring+1,side),moonPoint(ring+1,side+1),moonPoint(ring,side+1),[.68,.71,.83],.12);
     }
-    return {objects:objects.data,halos:halos.data,clouds:clouds.data,moon:moon.data};
+    return {objects:objects.data,halos:halos.data,cloud:cloudProxy(),moon:moon.data};
   }
 
-  function cloudDrift(seconds) {
-    return [7*Math.sin(seconds*.033),.48*Math.sin(seconds*.028),3.2*Math.cos(seconds*.029)];
+  function floorDrift(seconds) {
+    return [5.2*Math.sin(seconds*.023),.42*Math.sin(seconds*.017),2.9*Math.cos(seconds*.019)];
+  }
+
+  function wispsDrift(seconds) {
+    return [-10*Math.sin(seconds*.028),1.6*Math.sin(seconds*.036),4.8*Math.sin(seconds*.024)];
+  }
+
+  function cloudVolumes(seconds) {
+    const drift = wispsDrift(seconds);
+    return strands.map(([x,z,width,length,base,height,tint,density,lean]) => {
+      return { center:W.add([x,base,z],drift), size:[width,height,length], tint, density, lean };
+    });
   }
 
   const warmth = ([x]) => ease(x,5710,6125);
 
-  return {influence,overhead,create,cloudDrift,warmth};
+  return {influence,overhead,create,cloudVolumes,floorDrift,warmth};
 })();
