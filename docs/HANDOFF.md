@@ -1,6 +1,6 @@
 # 新聊天 / 新模型交接
 
-更新日期：2026-11-23。适用于继续维护本仓库的后续助手，不绑定某个模型型号。
+更新日期：2026-11-24。适用于继续维护本仓库的后续助手，不绑定某个模型型号。
 
 ## 用户当前决定与本轮范围
 
@@ -15,17 +15,23 @@
 | 项目 | 核对结果 |
 | --- | --- |
 | 仓库 | `Colorful-white/midnight-railway` |
-| 分支 | 整理前为 `main`；新会话仍需自行核实 |
+| 分支 | `main` |
 | 网站 | <https://colorful-white.github.io/midnight-railway/> |
-| 当前应用功能 | 23:10 眠云谷，含打磨后的谷底雾、山腰薄云和平滑岩壁 |
-| 当前构建资源版本 | `1100cf395e972093` |
-| Pages 发布记录 | 用 `git log -1 -- dream-valley.js` 定位本次打磨提交，并查 [Publish railway](https://github.com/Colorful-white/midnight-railway/actions/workflows/pages.yml) |
-| 前一功能版本 | `68e62c09d15bb8249ae89b6fd988fead5d3ecac8`，眠云谷首版，资源版本 `468a251168ea2da8`，[部署 45189108200](https://github.com/Colorful-white/midnight-railway/actions/runs/45189108200) |
+| 当前应用功能 | 22:53 眠云谷，沿用谷底雾、山腰薄云和平滑岩壁 |
+| 当前构建资源版本 | `16d1a00271eee6c1` |
+| Pages 发布记录 | 按本轮提交在 [Publish railway](https://github.com/Colorful-white/midnight-railway/actions/workflows/pages.yml) 核对 |
+| 前一功能版本 | `cea28343ad450e1d6534803e4bdc60466593b4b2`，23:10 眠云谷，资源版本 `1100cf395e972093`，[部署 45194055899](https://github.com/Colorful-white/midnight-railway/actions/runs/45194055899) |
 | 工具链 | 当前本地 Node.js `v24.19.0`；CI 使用 Node.js 24 |
 
 接手时同时看 Git 日志和工作区差异。部署时核对本次 Actions 结果和线上资源版本。
 
-## 本轮打磨：眠云谷云雾与岩壁
+## 本轮更新：原版眠云谷提前到 22:53
+
+- 用户撤回山口与调色试版，保留将眠云谷移到薄荷海正式观景结束五分钟后的安排。已上线的山谷布置、配色、灯和雾随景观移到同一条返程铁路的较早路段。22:53 入谷，23:00 接入月下归途。
+- 轨道按每 2 里程单位取样、时刻插值按每 5 秒取样，与前一版本一致。
+- Chrome 检查了入谷车窗、谷心、小屋和俯视画面，以及「时段体验」跳转、窄屏和 23:00 出谷。
+
+## 前一轮打磨：眠云谷云雾与岩壁
 
 - 用户指出云雾不细腻、山谷凹凸偏粗。把谷底雾和山腰薄云分开，谷底雾按到地表的厚度淡去，山腰薄云单独缓慢漂移；细化谷心采样，以共享法线过渡并加入淡岩层。
 - 已按同一车窗位置对照眠云谷首版，核对山谷地形接缝、旁路地形与全线轨迹、桌面和手机横竖屏模拟、暂停、薄荷海、应用更新与离线重开。手机真机尚未实测。

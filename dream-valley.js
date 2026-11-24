@@ -4,8 +4,11 @@ const DreamValley = (() => {
   const start = W.distanceAt(valley.minute);
   const end = W.distanceAt(valley.minute+valley.duration);
   const ease = (value,a,b) => W.smooth(W.clamp((value-a)/(b-a),0,1));
+  const [offsetX,offsetZ] = valley.offset;
+  const worldPoint = (x,z) => [x+offsetX,z+offsetZ];
 
-  function influence([x,,z]) {
+  function influence([worldX,,worldZ]) {
+    const x = worldX-offsetX, z = worldZ-offsetZ;
     return ease(x,4920,5210)*(1-ease(x,5960,6280))*ease(z,169,305)*(1-ease(z,725,809));
   }
 
@@ -21,7 +24,8 @@ const DreamValley = (() => {
       [6058,541,2.7],[6048,511,3.3],[6028,516,3.5],[6019,474,3.6],[5998,478,3.4],[5920,484,3.2],
       [5855,541,2.7],[5805,558,2.9],[5741,581,2.7],[5681,588,2.4],[5655,586,2.2]
     ];
-    for (const [x,z,height] of posts) {
+    for (const [localX,localZ,height] of posts) {
+      const [x,z] = worldPoint(localX,localZ);
       const y = W.groundHeight(x,z);
       mesh.cone(x,y,z,.36,.22,height,[.26,.23,.22],6);
       mesh.box(x,y+height,z,1.3,.76,1.18,[.92,.68,.39],1.28);
@@ -32,7 +36,8 @@ const DreamValley = (() => {
         halos.cone(x,y+height+.38,z,radius,0,radius*.54,[1,.71,.43],12,0,light);
       }
     }
-    for (const [x,z,h] of [[6122,569,1.2],[6107,567,1.1],[6092,565,.9],[6075,564,.9],[6036,567,1.1],[6022,566,.7]]) {
+    for (const [localX,localZ,h] of [[6122,569,1.2],[6107,567,1.1],[6092,565,.9],[6075,564,.9],[6036,567,1.1],[6022,566,.7]]) {
+      const [x,z] = worldPoint(localX,localZ);
       if (!W.nearRail(x,z,7)) mesh.cone(x,W.groundHeight(x,z),z,h*.53,.15,h,[.38,.38,.32],5);
     }
   }
@@ -48,8 +53,8 @@ const DreamValley = (() => {
   }
 
   function groves(mesh) {
-    for (const minute of [1390.8,1391.47,1392.19]) {
-      const distance = W.distanceAt(minute);
+    for (const delay of [.8,1.47,2.19]) {
+      const distance = W.distanceAt(valley.minute+delay);
       const [x,,z] = W.position(distance);
       const [hx,,hz] = W.heading(distance);
       for (const [ahead,side,height] of [[-23,43,6.3],[0,46,8.2],[9,54,6],[26,62,4.8],[44,51,5.4]]) {
@@ -123,11 +128,12 @@ const DreamValley = (() => {
 
   function stonePath(mesh) {
     const [cottageX,cottageZ] = valley.cottage;
-    for (let x=cottageX+3;x<=5945;x+=8.5) {
-      const progress = (x-cottageX)/(5945-cottageX);
-      const z = W.mix(cottageZ+10,493,progress)+24*Math.sin(progress*Math.PI);
+    const [endX,endZ] = worldPoint(5945,493);
+    for (let x=cottageX+3;x<=endX;x+=8.5) {
+      const progress = (x-cottageX)/(endX-cottageX);
+      const z = W.mix(cottageZ+10,endZ,progress)+24*Math.sin(progress*Math.PI);
       const y = W.groundHeight(x,z)-.18;
-      const width = 1.2+.28*Math.sin(x*.31);
+      const width = 1.2+.28*Math.sin((x-offsetX)*.31);
       mesh.cone(x,y,z,width,width*.85,.43,[.37,.37,.41],5,.11);
     }
   }
@@ -163,11 +169,12 @@ const DreamValley = (() => {
     groves(objects);
     stonePath(objects);
     cottage(objects,halos);
+    const [moonX,moonZ] = worldPoint(5260,234);
     const moonPoint = (ring,side) => {
       const angle = side*Math.PI/8;
       const latitude = ring*Math.PI/12;
-      return [5260+4.3*Math.sin(latitude)*Math.cos(angle), 95+4.3*Math.cos(latitude),
-        234+4.3*Math.sin(latitude)*Math.sin(angle)];
+      return [moonX+4.3*Math.sin(latitude)*Math.cos(angle), 95+4.3*Math.cos(latitude),
+        moonZ+4.3*Math.sin(latitude)*Math.sin(angle)];
     };
     for (let ring=0;ring<12;ring++) for (let side=0;side<16;side++) {
       moon.quad(moonPoint(ring,side),moonPoint(ring+1,side),moonPoint(ring+1,side+1),moonPoint(ring,side+1),[.68,.71,.83],.12);
@@ -186,11 +193,11 @@ const DreamValley = (() => {
   function cloudVolumes(seconds) {
     const drift = wispsDrift(seconds);
     return strands.map(([x,z,width,length,base,height,tint,density,lean]) => {
-      return { center:W.add([x,base,z],drift), size:[width,height,length], tint, density, lean };
+      return { center:W.add([x+offsetX,base,z+offsetZ],drift), size:[width,height,length], tint, density, lean };
     });
   }
 
-  const warmth = ([x]) => ease(x,5710,6125);
+  const warmth = ([x]) => ease(x-offsetX,5710,6125);
 
   return {influence,overhead,create,cloudVolumes,floorDrift,warmth};
 })();

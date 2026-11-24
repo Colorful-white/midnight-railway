@@ -30,7 +30,15 @@ const RailwayWorld = (() => {
   const tree = { x: -108, z: -32 };
   const lake = { x: 95, z: -6 };
   const sea = { x: 8910, z: 572, surface: 3.2, floor: -11.5, startNode: 0, endNode: 0 };
-  const dream = { x: 5604, z: 337, minute: 1390, duration: 7, basin: [5648,460], cottage: [5624,573] };
+  // Move the authored valley to the earlier stretch of the existing return line.
+  const dreamOffset = [2215,-40];
+  const [dreamOffsetX,dreamOffsetZ] = dreamOffset;
+  const dreamPoint = (x,z) => [x+dreamOffsetX,z+dreamOffsetZ];
+  const [dreamX,dreamZ] = dreamPoint(5604,337);
+  const dream = {
+    x:dreamX, z:dreamZ, minute:stops[3].minute+stops[3].duration+5, duration:7,
+    basin:dreamPoint(5648,460), cottage:dreamPoint(5624,573), offset:dreamOffset
+  };
   // The softer skyline suggests a curled deer through the crest of a real ridge.
   const sleepingRidge = [
     [-116,0],[-91,8],[-76,14],[-66,23],[-54,25],[-45,33],[-37,46],[-32,40],[-26,43],
@@ -44,10 +52,11 @@ const RailwayWorld = (() => {
     return mix(a[1],b[1],smooth((local-a[0])/(b[0]-a[0])));
   }
   function dreamGround(x,z) {
-    if (x<=4940 || x>=6290 || z<=210 || z>=652) return 0;
+    // Taper the relocated foothills before the neighboring outbound line.
+    if (x<=4940 || x>=6290 || z<=245 || z>=652) return 0;
     const basin = smooth(clamp((x-5100)/300,0,1))*smooth(clamp((6110-x)/280,0,1));
     const nearRim = smooth(clamp((x-5435)/114,0,1))*smooth(clamp((5865-x)/114,0,1));
-    const edge = Math.min((x-4940)/134,(6290-x)/150,(z-210)/40,(515+110*basin+27*nearRim-z)/51);
+    const edge = Math.min((x-4940)/134,(6290-x)/150,(z-245)/32,(515+110*basin+27*nearRim-z)/51);
     return smooth(clamp(edge,0,1));
   }
   // Negative material markers above -.5 never participate in the water or alpha passes.
@@ -295,16 +304,17 @@ const RailwayWorld = (() => {
     const basin = Math.hypot((x-sea.x)/190,(z-sea.z)/140);
     const depth = 1-smooth(clamp((basin-.65)/.45,0,1));
     const basinFloor = mix(ordinary,sea.floor+.28*Math.sin(x*.13)*Math.cos(z*.11),depth);
-    const valley = dreamGround(x,z);
+    const localX = x-dreamOffsetX, localZ = z-dreamOffsetZ;
+    const valley = dreamGround(localX,localZ);
     if (!valley) return basinFloor;
-    const hill = (cx,cz,wide,deep,height) => height*Math.exp(-(((x-cx)/wide)**2+((z-cz)/deep)**2));
-    const farRange = hill(5950,250,230,47,52)+hill(5385,238,235,52,43);
+    const hill = (cx,cz,wide,deep,height) => height*Math.exp(-(((localX-cx)/wide)**2+((localZ-cz)/deep)**2));
+    const farRange = hill(5950,269,230,47,52)+hill(5385,268,235,52,43);
     const cliffs = hill(5488,340,71,84,122)+hill(5755,315,81,92,139)+hill(5832,345,55,67,63);
     const banks = hill(6045,460,106,54,31)+hill(5230,361,164,66,32)+hill(5805,528,69,26,8);
     const crescent = sleepingCrest(x)*1.33*Math.exp(-(((z-dream.z)/50)**2));
     const [basinX,basinZ] = dream.basin;
     const pocket = 49*Math.exp(-(((x-basinX)/152)**4+((z-basinZ)/98)**4));
-    const floor = -3.2+1.15*Math.sin(x*.016+z*.031)-pocket;
+    const floor = -3.2+1.15*Math.sin(localX*.016+localZ*.031)-pocket;
     const [cottageX,cottageZ] = dream.cottage;
     const shelf = Math.exp(-(((x-cottageX)/42)**6+((z-cottageZ)/29)**6));
     const valleyHeight = mix(floor+farRange+cliffs+banks+crescent,15.2,shelf);
@@ -315,9 +325,13 @@ const RailwayWorld = (() => {
   const step = 5;
   const core = { left: -260, right: 255, north: -235, south: 215 };
   const insideCore = (x, z) => x >= core.left && x < core.right && z >= core.north && z < core.south;
-  const valleyDetail = {left:5430,right:5850,north:260,south:615};
+  const valleyDetail = {left:5430+dreamOffsetX,right:5850+dreamOffsetX,north:260+dreamOffsetZ,south:615+dreamOffsetZ};
+  function overlapsValley(x,z,size) {
+    return x<6310+dreamOffsetX && x+size>4880+dreamOffsetX && z<778+dreamOffsetZ && z+size>201+dreamOffsetZ;
+  }
   function valleyTones(x,z) {
-    return smooth(clamp(Math.min((x-4880)/180,(6310-x)/220,(z-201)/50,(778-z)/96),0,1));
+    const localX = x-dreamOffsetX, localZ = z-dreamOffsetZ;
+    return smooth(clamp(Math.min((localX-4880)/180,(6310-localX)/220,(localZ-201)/50,(778-localZ)/96),0,1));
   }
   function valleyVertex(x,z,cache) {
     const key = x+','+z;
@@ -333,11 +347,12 @@ const RailwayWorld = (() => {
     const normal = unit([terrain(x-half,z)-terrain(x+half,z),step,terrain(x,z-half)-terrain(x,z+half)]);
     const exposure = smooth(clamp((y-12)/72,0,1));
     const rock = smooth(clamp((1-normal[1]-.08)/.57,0,1)) * exposure;
-    const seam = Math.sin(y*.168+x*.016+Math.sin(z*.058)*.56)+.48*Math.sin(y*.39-z*.021);
+    const localX = x-dreamOffsetX, localZ = z-dreamOffsetZ;
+    const seam = Math.sin(y*.168+localX*.016+Math.sin(localZ*.058)*.56)+.48*Math.sin(y*.39-localZ*.021);
     const stratum = (smooth(clamp((seam+.65)/1.35,0,1))-.45)*rock;
-    const rear = 1-smooth(clamp((z-281)/155,0,1));
+    const rear = 1-smooth(clamp((localZ-281)/155,0,1));
     const floor = [.230,.247,.305], distant = [.320,.323,.419], cliff = [.386,.382,.474];
-    const variation = .96+.038*Math.sin(x*.041+z*.061);
+    const variation = .96+.038*Math.sin(localX*.041+localZ*.061);
     const color = floor.map((base,i) => mix(mix(base,distant[i],rear),cliff[i],exposure)*variation+stratum*.10);
     const sample = {point:[x,y,z],normal,color,amount:valleyTones(x,z)};
     cache.set(key,sample);
@@ -383,7 +398,7 @@ const RailwayWorld = (() => {
     }
     const color = tint(base,shade);
     const secondShade = between(.95,1.05);
-    if (valleyCache && x<6310 && x+step>4880 && z<778 && z+step>201) {
+    if (valleyCache && overlapsValley(x,z,step)) {
       valleyCell(mesh,x,z,valleyCache,color,drifts[0]);
       return;
     }
@@ -626,7 +641,7 @@ const RailwayWorld = (() => {
     const mesh = new Mesh();
     const left = column * tileSize;
     const north = row * tileSize;
-    const valleyCache = left<6310 && left+tileSize>4880 && north<778 && north+tileSize>201 ? new Map() : null;
+    const valleyCache = overlapsValley(left,north,tileSize) ? new Map() : null;
     const savedSeed = seed;
     seed = Math.imul(column, 73856093) ^ Math.imul(row, 19349663) ^ 18601;
     for (let z = north; z < north + tileSize; z += step) {
@@ -638,7 +653,7 @@ const RailwayWorld = (() => {
       const x = left + between(0, tileSize);
       const z = north + between(0, tileSize);
       if (insideCore(x, z) || nearRail(x, z, 4.8) || Math.hypot((x-sea.x)/190,(z-sea.z)/140)<1.13
-        || (x>4990 && x<6190 && z>204 && z<712)) continue;
+        || (x>4990+dreamOffsetX && x<6190+dreamOffsetX && z>204+dreamOffsetZ && z<712+dreamOffsetZ)) continue;
       const woods = Math.sin(x * .019 + z * .028) + Math.cos(z * .043 - x * .011);
       const meadow = x > 310 && z > 100;
       if (woods > (meadow ? .78 : -.12)) {
