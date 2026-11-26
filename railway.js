@@ -15,6 +15,12 @@
   const installToggle = byId('install-toggle');
   const cameraOptions = [...cameraPanel.querySelectorAll('input[type="radio"]')];
   const cameraPreference = 'midnight-railway.camera';
+  const cabinPanel = byId('cabin-panel');
+  const cabinToggle = byId('cabin-toggle');
+  const cabinPreference = 'midnight-railway.cabin';
+  const cabinSlots = Object.entries(CabinScene.options);
+  const cabinSelection = savedCabinSelection();
+  let cabinRevision = 0;
   const returnLive = byId('return-live');
   const scrub = byId('scrub');
   const freeze = byId('freeze');
@@ -43,6 +49,49 @@
       // A local-file browser session can disallow storage.
     }
     return 'section';
+  }
+  function savedCabinSelection() {
+    let saved;
+    try {
+      saved = JSON.parse(localStorage.getItem(cabinPreference));
+    } catch {
+      // Ignore malformed or unavailable preferences.
+    }
+    return Object.fromEntries(cabinSlots.map(([slot,{choices}]) => {
+      const ids = Object.keys(choices);
+      const value = slot==='drink' && saved?.drink==='strawberry' ? 'strawberry-cake' : saved?.[slot];
+      return [slot,ids.includes(value) ? value : ids[0]];
+    }));
+  }
+  for (const [slot,{label,choices}] of cabinSlots) {
+    const group = document.createElement('fieldset');
+    group.className = 'cabin-choices';
+    const legend = document.createElement('legend');
+    legend.textContent = label;
+    const choicesList = document.createElement('div');
+    for (const [value,name] of Object.entries(choices)) {
+      const option = document.createElement('label');
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'cabin-'+slot;
+      input.value = value;
+      input.checked = value===cabinSelection[slot];
+      const text = document.createElement('span');
+      text.textContent = name;
+      option.append(input,text);
+      choicesList.append(option);
+      input.addEventListener('change', () => {
+        cabinSelection[slot] = value;
+        cabinRevision++;
+        try {
+          localStorage.setItem(cabinPreference,JSON.stringify(cabinSelection));
+        } catch {
+          // Keep the active selection in memory when storage is unavailable.
+        }
+      });
+    }
+    group.append(legend,choicesList);
+    byId('cabin-options').append(group);
   }
   function planetMap() {
     const track = byId('planet-track');
@@ -135,6 +184,8 @@
   function setView(next) {
     view = next;
     root.classList.toggle('is-cabin', next === 'cabin');
+    cabinToggle.hidden = next !== 'cabin';
+    if (cabinToggle.hidden) showPanel(cabinToggle,cabinPanel,false);
     const free = isFreeView();
     root.classList.toggle('is-free', free);
     if (free) canvas.tabIndex = 0;
@@ -235,7 +286,10 @@
     ticketToggle.setAttribute('aria-expanded', String(open));
   }
   function setMenu(open) {
-    if (open) setDepartures(false);
+    if (open) {
+      setDepartures(false);
+      showPanel(cabinToggle,cabinPanel,false);
+    }
     menu.hidden = !open;
     root.classList.toggle('is-menu-open', open);
     menuToggle.setAttribute('aria-expanded', String(open));
@@ -244,13 +298,32 @@
   menuToggle.addEventListener('click', () => setMenu(menu.hidden));
   ticketToggle.addEventListener('click', () => {
     const open = departures.hidden;
-    if (open) setMenu(false);
+    if (open) {
+      setMenu(false);
+      showPanel(cabinToggle,cabinPanel,false);
+    }
     setDepartures(open);
   });
   function showPanel(button, panel, open) {
     panel.hidden = !open;
     button.setAttribute('aria-expanded', String(open));
   }
+  function closeCabinPanel() {
+    showPanel(cabinToggle,cabinPanel,false);
+    cabinToggle.focus();
+  }
+  cabinToggle.addEventListener('click', () => {
+    const open = cabinPanel.hidden;
+    if (open) setDepartures(false);
+    showPanel(cabinToggle,cabinPanel,open);
+    if (open) cabinPanel.querySelector('input:checked').focus({preventScroll:true});
+  });
+  byId('cabin-close').addEventListener('click',closeCabinPanel);
+  document.addEventListener('pointerdown', event => {
+    if (!cabinPanel.hidden && !cabinPanel.contains(event.target) && !cabinToggle.contains(event.target)) {
+      showPanel(cabinToggle,cabinPanel,false);
+    }
+  });
   experienceToggle.addEventListener('click', () => {
     const open = experiencePanel.hidden;
     showPanel(experienceToggle, experiencePanel, open);
@@ -284,6 +357,8 @@
     } else if (!departures.hidden) {
       setDepartures(false);
       ticketToggle.focus();
+    } else if (!cabinPanel.hidden) {
+      closeCabinPanel();
     }
   });
   function showExperienceState() {
@@ -759,7 +834,6 @@
       gl.uniform1f(uniforms.pointScale, 0);
     }
     let cabin = null;
-    let cabinAspect = 0;
     const steamBuffer = buffer([],gl.DYNAMIC_DRAW);
     let steamCapacity = 0;
     function drawTransparent(mesh, offset, heading, scale = 1) {
@@ -770,13 +844,37 @@
       gl.depthMask(true);
       gl.disable(gl.BLEND);
     }
-    function drawCabin(aspect, sky, seconds) {
-      if (cabinAspect !== aspect) {
-        if (cabin) for (const mesh of [cabin.sill,cabin.objects,cabin.shadows,cabin.glass]) gl.deleteBuffer(mesh.handle);
-        const scene = CabinScene.create(aspect);
-        cabin = { ...scene, sill:buffer(scene.sill),objects:buffer(scene.objects),shadows:buffer(scene.shadows),glass:buffer(scene.glass) };
-        cabinAspect = aspect;
+    function releaseCabinProp(prop) {
+      for (const mesh of [prop.objects,prop.shadows,prop.glass]) {
+        if (mesh) gl.deleteBuffer(mesh.handle);
       }
+    }
+    function prepareCabin(aspect) {
+      if (cabin?.aspect !== aspect) {
+        if (cabin) {
+          gl.deleteBuffer(cabin.sill.handle);
+          gl.deleteBuffer(cabin.glass.handle);
+          for (const prop of Object.values(cabin.props)) releaseCabinProp(prop);
+        }
+        const scene = CabinScene.create(aspect);
+        cabin = {...scene,aspect,sill:buffer(scene.sill),glass:buffer(scene.glass),props:{},revision:-1};
+      }
+      if (cabin.revision===cabinRevision) return;
+      for (const [slot] of cabinSlots) {
+        const choice = cabinSelection[slot], previous = cabin.props[slot];
+        if (previous?.choice===choice) continue;
+        const scene = CabinScene.prop(cabin.slots[slot],slot,choice);
+        cabin.props[slot] = {
+          choice, steamOrigin:scene.steamOrigin, objects:scene.objects.length ? buffer(scene.objects) : null,
+          shadows:scene.shadows.length ? buffer(scene.shadows) : null, glass:scene.glass.length ? buffer(scene.glass) : null
+        };
+        if (previous) releaseCabinProp(previous);
+      }
+      cabin.drawList = Object.values(cabin.props);
+      cabin.revision = cabinRevision;
+    }
+    function drawCabin(aspect, sky, seconds) {
+      prepareCabin(aspect);
       gl.clear(gl.DEPTH_BUFFER_BIT);
       // The foreground has its own depth pass: reserve precision for thin petals and leaf veins.
       gl.uniformMatrix4fv(uniforms.projection,false,projection(cabin.fov,aspect,2,20));
@@ -787,9 +885,12 @@
       gl.uniform1f(uniforms.valleyAir,0);
       drawTransparent(cabin.glass);
       draw(cabin.sill);
-      drawTransparent(cabin.shadows);
-      draw(cabin.objects);
-      const steam = CabinScene.steam(reducedMotion.matches ? 0 : seconds,cabin.steamOrigin);
+      for (const prop of cabin.drawList) if (prop.shadows) drawTransparent(prop.shadows);
+      for (const prop of cabin.drawList) if (prop.objects) draw(prop.objects);
+      for (const prop of cabin.drawList) if (prop.glass) drawTransparent(prop.glass);
+      const {steamOrigin} = cabin.props.drink;
+      if (!steamOrigin) return;
+      const steam = CabinScene.steam(reducedMotion.matches ? 0 : seconds,steamOrigin);
       gl.bindBuffer(gl.ARRAY_BUFFER,steamBuffer.handle);
       if (steamCapacity !== steam.byteLength) {
         gl.bufferData(gl.ARRAY_BUFFER,steam.byteLength,gl.DYNAMIC_DRAW);
@@ -989,7 +1090,8 @@
       const resolution = Math.min(devicePixelRatio || 1, 1.6);
       const width = Math.max(1, Math.round(root.clientWidth * resolution));
       const height = Math.max(1, Math.round(root.clientHeight * resolution));
-      const renderKey = [minute, season.id, width, height, view, overheadMode, isFreeView() && freeFrame?.target.join(), motionSeconds].join();
+      const renderKey = [minute, season.id, width, height, view, overheadMode, isFreeView() && freeFrame?.target.join(),
+        motionSeconds, view==='cabin' && cabinRevision].join();
       if (renderKey === lastRender) return;
       lastRender = renderKey;
       if (canvas.width !== width || canvas.height !== height) {

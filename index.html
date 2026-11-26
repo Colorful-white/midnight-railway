@@ -150,7 +150,17 @@
         <button id="aerial" type="button" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 16 6-9 4 5 3-3 5 7H3Z"/><circle cx="17.5" cy="5.5" r="1.5"/></svg>俯视</button>
         <button id="window" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3.5" width="16" height="17" rx="4"/><path d="M4 15h16m-10 0 3-5 4 5"/></svg>车窗</button>
       </div>
+      <button id="cabin-toggle" type="button" aria-label="窗台布置" aria-expanded="false" aria-controls="cabin-panel" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M8 12h8l-1 5H9Zm4 0V8m0 1c-3 0-5-2-5-5 3 0 5 2 5 5Zm0 0c3 0 5-2 5-5-3 0-5 2-5 5Z"/></svg>窗台
+      </button>
     </nav>
+    <aside id="cabin-panel" class="cabin-panel" aria-labelledby="cabin-title" hidden>
+      <div class="cabin-heading">
+        <h2 id="cabin-title">窗台布置</h2>
+        <button id="cabin-close" type="button" aria-label="收起窗台布置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div id="cabin-options"></div>
+    </aside>
     <p id="failure" class="failure" hidden></p>
   </main>
 </body>
